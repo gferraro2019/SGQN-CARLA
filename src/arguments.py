@@ -15,7 +15,7 @@ def parse_args():
 
     # agent
     parser.add_argument("--algorithm", default="sgsac", type=str)
-    parser.add_argument("--train_steps", default="500k", type=str)
+    parser.add_argument("--train_steps", default="50k", type=str)
     parser.add_argument("--discount", default=0.99, type=float)
     parser.add_argument("--init_steps", default=1000, type=int)
     parser.add_argument("--batch_size", default=128, type=int)
@@ -67,8 +67,8 @@ def parse_args():
     parser.add_argument("--consistency", default=1, type=int)
 
     # eval
-    parser.add_argument("--save_freq", default="100k", type=str)
-    parser.add_argument("--eval_freq", default="10k", type=str)
+    parser.add_argument("--save_freq", default="10k", type=str)
+    parser.add_argument("--eval_freq", default="1k", type=str)
     parser.add_argument("--eval_episodes", default=30, type=int)
     parser.add_argument("--distracting_cs_intensity", default=0.0, type=float)
 

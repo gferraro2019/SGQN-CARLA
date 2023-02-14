@@ -1,0 +1,25 @@
+name: sgqn-carla
+channels:
+    - defaults
+dependencies:
+    - python=3.8.13
+    - pip
+    - pip:
+        - torch --extra-index-url https://download.pytorch.org/whl/cu116
+        - torchvision --extra-index-url https://download.pytorch.org/whl/cu116
+        - torchaudio --extra-index-url https://download.pytorch.org/whl/cu116
+        - numpy==1.23.1
+        - captum==0.5.0       
+        - imageio==2.9.0
+        - kornia==0.6.6
+        - termcolor==1.1.0
+        - tensorboard==2.9.1
+        - tqdm==4.64.0
+        - xmltodict==0.13.0
+        - gym==0.18.3
+        - carla==0.9.14
+        - pygame==2.1.2
+        - shapely==2.0.1
+        - networkx==3.0
+        - jupyter
+

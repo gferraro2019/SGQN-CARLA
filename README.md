@@ -1,30 +1,31 @@
+# Install CARLA Simulator
+Download and extract the Carla version 0.9.14 for your specific OS:
+https://github.com/carla-simulator/carla/releases/tag/0.9.14/
+
+[Optional] Download the additional maps package for the Carla version 0.9.14 for your specific OS.
+
+# To start CARLA Simulator
+1. Go into /CARLA_0.9.14 folder
+2. launch the simulator, for Ubuntu type in a terminal the line:
+	./CarlaUE4.sh
+3. To navigate in the simulator window use "ASDW" keys and the mouse
+
+# How to solve some error after launching the server app:
+E: error while loading shared libraries: libomp.so.5: cannot open shared object file: No such file or directory
+S: sudo apt-get install libomp5
 
 # Overview
 ![Perf](figures/sgqnarchi.png)
 ![Perf](figures/sgqn_perf.png)
 
-## Setup
+## Install SGQN
 We assume that you have access to a GPU with CUDA >=9.2 support. All dependencies can then be installed with the following commands:
 
 ```
-conda env create -f setup/conda.yml
-conda activate dmcgb
-sh setup/install_envs.sh
+conda env create --file setup/sgqn-carla.yml
+conda activate sgqn-carla
+sh setup/install.sh
 ```
-
-If you don't have the right mujoco version installed: 
-```
-sh setup/install_mujoco_deps.sh
-sh setup/prepare_dm_control_xp.sh
-```
-
-
-## Datasets
-
-```
-wget http://data.csail.mit.edu/places/places365/places365standard_easyformat.tar
-```
-After downloading and extracting the data, add your dataset directory to the datasets list in `setup/config.cfg`.
 
 # Run `SGQN` training:
 ```bash
