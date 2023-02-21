@@ -11,7 +11,7 @@ https://github.com/carla-simulator/carla/releases/tag/0.9.14/
 3. To navigate in the simulator window use "ASDW" keys and the mouse
 
 # How to solve some error after launching the server app:
-E: error while loading shared libraries: libomp.so.5: cannot open shared object file: No such file or directory
+E: error while loading shared libraries: libomp.so.5: cannot open shared object file: No such file or directory <br>
 S: sudo apt-get install libomp5
 
 # Overview
