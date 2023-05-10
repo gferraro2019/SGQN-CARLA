@@ -9,6 +9,9 @@ import dmc2gym
 from dmc2gym.wrappers import DMCWrapper
 import utils
 from collections import deque
+import matplotlib.pyplot as plt
+import random
+from PIL import Image
 
 
 def make_env(
@@ -167,10 +170,6 @@ class ColorWrapper(gym.Wrapper):
     def _set_state(self, state):
         self._get_physics().set_state(state)
 
-
-import matplotlib.pyplot as plt
-import random
-from PIL import Image
 
 # from numpy import asarray
 
