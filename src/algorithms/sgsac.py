@@ -24,7 +24,9 @@ class SGSAC(SAC):
     def __init__(self, obs_shape, action_shape, args):
         super().__init__(obs_shape, action_shape, args)
 
-        self.attribution_predictor = m.AttributionPredictor(action_shape[0],self.critic.encoder).cuda()
+        self.attribution_predictor = m.AttributionPredictor(
+            action_shape[0], self.critic.encoder
+        ).cuda()
         self.quantile = args.sgqn_quantile
         self.aux_update_freq = args.aux_update_freq
         self.consistency = args.consistency
@@ -44,7 +46,6 @@ class SGSAC(SAC):
         )
         self.writer = SummaryWriter(tb_dir)
 
-
     def update_critic(self, obs, action, reward, next_obs, not_done, L=None, step=None):
         with torch.no_grad():
             _, policy_action, log_pi, _ = self.actor(next_obs)
@@ -54,17 +55,20 @@ class SGSAC(SAC):
 
         current_Q1, current_Q2 = self.critic(obs, action)
 
-
         critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(
             current_Q2, target_Q
         )
         if self.consistency:
-            obs_grad = compute_attribution(self.critic,obs,action.detach())
-            mask = compute_attribution_mask(obs_grad,self.quantile)
-            masked_obs = obs*mask
-            masked_obs[mask<1] = random.uniform(obs.view(-1).min(),obs.view(-1).max()) 
-            masked_Q1,masked_Q2 = self.critic(masked_obs,action)
-            critic_loss += 0.5 *(F.mse_loss(current_Q1,masked_Q1) + F.mse_loss(current_Q2,masked_Q2))
+            obs_grad = compute_attribution(self.critic, obs, action.detach())
+            mask = compute_attribution_mask(obs_grad, self.quantile)
+            masked_obs = obs * mask
+            masked_obs[mask < 1] = random.uniform(
+                obs.view(-1).min(), obs.view(-1).max()
+            )
+            masked_Q1, masked_Q2 = self.critic(masked_obs, action)
+            critic_loss += 0.5 * (
+                F.mse_loss(current_Q1, masked_Q1) + F.mse_loss(current_Q2, masked_Q2)
+            )
         if L is not None:
             L.log("train_critic/loss", critic_loss, step)
 
@@ -73,12 +77,14 @@ class SGSAC(SAC):
         self.critic_optimizer.step()
 
     def update_aux(self, obs, action, obs_grad, mask, step=None, L=None):
-        mask = compute_attribution_mask(obs_grad,self.quantile)
-        s_prime = augmentations.attribution_augmentation(obs.clone(), mask.float())
+        mask = compute_attribution_mask(obs_grad, self.quantile)
+        s_prime = augmentations.attribution_augmentation(
+            obs.clone(), mask.float(), "carla"
+        )
 
-        s_tilde = augmentations.random_overlay(obs.clone())
+        s_tilde = augmentations.random_overlay(obs.clone(), "carla")
         self.aux_optimizer.zero_grad()
-        pred_attrib, aux_loss = self.compute_attribution_loss(s_tilde,action, mask)
+        pred_attrib, aux_loss = self.compute_attribution_loss(s_tilde, action, mask)
         aux_loss.backward()
         self.aux_optimizer.step()
 
@@ -93,7 +99,7 @@ class SGSAC(SAC):
     def log_tensorboard(self, obs, action, step, prefix="original"):
         obs_grad = compute_attribution(self.critic, obs, action.detach())
         mask = compute_attribution_mask(obs_grad, quantile=self.quantile)
-        attrib = self.attribution_predictor(obs.detach(),action.detach())
+        attrib = self.attribution_predictor(obs.detach(), action.detach())
         grid = make_obs_grid(obs)
         self.writer.add_image(prefix + "/observation", grid, global_step=step)
         grad_grid = make_obs_grad_grid(obs_grad.data.abs())
@@ -113,12 +119,11 @@ class SGSAC(SAC):
                 prefix + "/attrib_q{}".format(q), masked_obs, global_step=step
             )
 
-    def compute_attribution_loss(self, obs,action, mask):
+    def compute_attribution_loss(self, obs, action, mask):
         mask = mask.float()
-        attrib = self.attribution_predictor(obs.detach(),action.detach())
+        attrib = self.attribution_predictor(obs.detach(), action.detach())
         aux_loss = F.binary_cross_entropy_with_logits(attrib, mask.detach())
         return attrib, aux_loss
-
 
     def update(self, replay_buffer, L, step):
         obs, action, reward, next_obs, not_done = replay_buffer.sample_drq()

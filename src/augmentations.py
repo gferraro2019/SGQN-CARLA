@@ -7,6 +7,7 @@ import utils
 import os
 import kornia
 import random
+import numpy as np
 
 places_dataloader = None
 places_iter = None
@@ -60,15 +61,33 @@ def _get_places_batch(batch_size):
     return imgs.cuda()
 
 
+def sample_frames_from_carla_dataset(x):
+    path_to_dataset = os.path.join(__file__[:-21], "datasets", "noisy_dataset_carla")
+    files = os.listdir(path_to_dataset)
+
+    # permute list
+    files = random.sample(files, x.size(0))
+
+    imgs = []
+    for f in files:
+        frame = np.load(os.path.join(path_to_dataset, f))
+        imgs.append(np.concatenate([frame, frame, frame]))
+    return torch.as_tensor(imgs).cuda()
+
+
 def random_overlay(x, dataset="places365_standard"):
     """Randomly overlay an image from Places"""
     global places_iter
-    alpha = 0.5
+    alpha = np.random.beta(0.2, 0.2)
 
     if dataset == "places365_standard":
         if places_dataloader is None:
             _load_places(batch_size=x.size(0), image_size=x.size(-1))
         imgs = _get_places_batch(batch_size=x.size(0)).repeat(1, x.size(1) // 3, 1, 1)
+
+    elif dataset == "carla":
+        imgs = sample_frames_from_carla_dataset(x)
+
     else:
         raise NotImplementedError(
             f'overlay has not been implemented for dataset "{dataset}"'
@@ -85,6 +104,10 @@ def attribution_augmentation(x, mask, dataset="places365_standard"):
         if places_dataloader is None:
             _load_places(batch_size=x.size(0), image_size=x.size(-1))
         imgs = _get_places_batch(batch_size=x.size(0)).repeat(1, x.size(1) // 3, 1, 1)
+
+    elif dataset == "carla":
+        imgs = sample_frames_from_carla_dataset(x)
+
     else:
         raise NotImplementedError(
             f'overlay has not been implemented for dataset "{dataset}"'
@@ -99,13 +122,19 @@ def attribution_augmentation(x, mask, dataset="places365_standard"):
 
 def paired_aug(obs, mask):
     mask = mask.float()
-    SEMANTIC = [kornia.augmentation.RandomAffine([-45., 45.], [0.3, 0.3], [0.5, 1.5], [0., 0.15]),kornia.augmentation.RandomErasing()]
-    no_sem = lambda x : random_overlay(x)
-    sem = random.sample(SEMANTIC,k=1)[0]
+    SEMANTIC = [
+        kornia.augmentation.RandomAffine(
+            [-45.0, 45.0], [0.3, 0.3], [0.5, 1.5], [0.0, 0.15]
+        ),
+        kornia.augmentation.RandomErasing(),
+    ]
+    no_sem = lambda x: random_overlay(x)
+    sem = random.sample(SEMANTIC, k=1)[0]
     img_out = no_sem(sem(obs))
 
     mask_out = sem(mask, sem._params)
     return img_out, mask_out
+
 
 def attribution_random_patch_augmentation(
     x,
@@ -116,7 +145,6 @@ def attribution_random_patch_augmentation(
     patch_proba=0.7,
     dataset="places365_standard",
 ):
-
     if dataset == "places365_standard":
         if places_dataloader is None:
             _load_places(batch_size=x.size(0), image_size=x.size(-1))

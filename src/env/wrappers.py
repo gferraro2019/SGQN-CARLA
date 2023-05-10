@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 import dmc2gym
+from dmc2gym.wrappers import DMCWrapper
 import utils
 from collections import deque
 
@@ -71,7 +72,7 @@ class ColorWrapper(gym.Wrapper):
     """Wrapper for the color experiments"""
 
     def __init__(self, env, mode, seed=None):
-        assert isinstance(env, FrameStack), "wrapped env must be a framestack"
+        # assert isinstance(env, FrameStack), "wrapped env must be a framestack"
         gym.Wrapper.__init__(self, env)
         self._max_episode_steps = env._max_episode_steps
         self._mode = mode
@@ -139,13 +140,9 @@ class ColorWrapper(gym.Wrapper):
 
     def _get_dmc_wrapper(self):
         _env = self.env
-        while not isinstance(_env, dmc2gym.wrappers.DMCWrapper) and hasattr(
-            _env, "env"
-        ):
+        while not isinstance(_env, DMCWrapper) and hasattr(_env, "env"):
             _env = _env.env
-        assert isinstance(
-            _env, dmc2gym.wrappers.DMCWrapper
-        ), "environment is not dmc2gym-wrapped"
+        assert isinstance(_env, DMCWrapper), "environment is not dmc2gym-wrapped"
 
         return _env
 
@@ -169,6 +166,74 @@ class ColorWrapper(gym.Wrapper):
 
     def _set_state(self, state):
         self._get_physics().set_state(state)
+
+
+import matplotlib.pyplot as plt
+import random
+from PIL import Image
+
+# from numpy import asarray
+
+
+class ColorWrapper_carla(gym.Wrapper):
+    """Wrapper for the color experiments"""
+
+    def __init__(
+        self, env, mode, alpha=0.5, n_frames=9, path_to_dataset=None, seed=None
+    ):
+        # assert isinstance(env, FrameStack), "wrapped env must be a framestack"
+        gym.Wrapper.__init__(self, env)
+        self._max_episode_steps = env._max_episode_steps
+        self._mode = mode
+        self._random_state = np.random.RandomState(seed)
+        self.alpha = alpha
+        self.n_frames = n_frames
+        if path_to_dataset is None:
+            self.path_to_dataset = os.path.join(
+                __file__[:-19], "datasets", "noisy_dataset_carla"
+            )
+
+    # def reset(self):
+    #     if "color" in self._mode:
+    #         self.randomize()
+    #     elif "video" in self._mode:
+    #         # apply greenscreen
+    #         setting_kwargs = {
+    #             "skybox_rgb": [0.2, 0.8, 0.2],
+    #             "skybox_rgb2": [0.2, 0.8, 0.2],
+    #             "skybox_markrgb": [0.2, 0.8, 0.2],
+    #         }
+    #         if self._mode == "video_hard":
+    #             setting_kwargs["grid_rgb1"] = [0.2, 0.8, 0.2]
+    #             setting_kwargs["grid_rgb2"] = [0.2, 0.8, 0.2]
+    #             setting_kwargs["grid_markrgb"] = [0.2, 0.8, 0.2]
+
+    #     return self.env.reset()
+
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        frames_from_dataset = self.sample_frames_from_dataset()
+        for i, frame in enumerate(obs.frames):
+            obs.frames[i] = (
+                self.alpha * frame + (1 - self.alpha) * frames_from_dataset[i]
+            )
+            obs.frames[i] = obs.frames[i].astype(np.int16)
+            # plt.imshow(obs.frames[i].reshape((84, 84, 3)))
+            # plt.show()
+        return obs, reward, done, info
+
+    def sample_frames_from_dataset(self):
+        files = os.listdir(os.path.join(self.path_to_dataset))
+
+        # permute list
+        files = random.sample(files, self.n_frames)
+
+        datasets = []
+        for f in files:
+            frame = np.load(os.path.join(self.path_to_dataset, f))
+            datasets.append(frame)
+
+        return datasets
 
 
 class FrameStack(gym.Wrapper):
@@ -195,6 +260,40 @@ class FrameStack(gym.Wrapper):
 
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
+        self._frames.append(obs)
+        return self._get_obs(), reward, done, info
+
+    def _get_obs(self):
+        assert len(self._frames) == self._k
+        return utils.LazyFrames(list(self._frames))
+
+
+class FrameStack_carla(gym.Wrapper):
+    """Stack frames as observation"""
+
+    def __init__(self, env, k):
+        gym.Wrapper.__init__(self, env)
+        self._k = k
+        self._frames = deque([], maxlen=k)
+        shp = env.observation_space.shape
+        self.observation_space = gym.spaces.Box(
+            low=0,
+            high=1,
+            shape=((shp[0] * k,) + shp[1:]),
+            dtype=env.observation_space.dtype,
+        )
+        self._max_episode_steps = env._max_episode_steps
+
+    def reset(self):
+        obs = self.env.reset()
+        # obs = obs.reshape((3, 84, 84))
+        for _ in range(self._k):
+            self._frames.append(obs)
+        return self._get_obs()
+
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        obs = obs.reshape((3, 84, 84))
         self._frames.append(obs)
         return self._get_obs(), reward, done, info
 
