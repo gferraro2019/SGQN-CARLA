@@ -1,6 +1,10 @@
 datasets/
 logs/
 out/
+log/
+output/
+*.zip
+*.ipynb
 
 # Editors
 .vscode/
