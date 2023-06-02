@@ -45,6 +45,7 @@ class SGSAC(SAC):
             "tensorboard",
         )
         self.writer = SummaryWriter(tb_dir)
+        self.count = 0
 
     def update_critic(self, obs, action, reward, next_obs, not_done, L=None, step=None):
         with torch.no_grad():
@@ -91,7 +92,7 @@ class SGSAC(SAC):
         if L is not None:
             L.log("train/aux_loss", aux_loss, step)
 
-        if step % 10000 == 0:
+        if step % 100 == 0:
             self.log_tensorboard(obs, action, step, prefix="original")
             self.log_tensorboard(s_tilde, action, step, prefix="augmented")
             self.log_tensorboard(s_prime, action, step, prefix="super_augmented")
@@ -102,22 +103,57 @@ class SGSAC(SAC):
         attrib = self.attribution_predictor(obs.detach(), action.detach())
         grid = make_obs_grid(obs)
         self.writer.add_image(prefix + "/observation", grid, global_step=step)
+        self.save_image(prefix + "/observation", "grid", grid, step)
+
         grad_grid = make_obs_grad_grid(obs_grad.data.abs())
         self.writer.add_image(prefix + "/attributions", grad_grid, global_step=step)
+        self.save_image(prefix + "/attributions", "grad_grid", grad_grid, step)
+
         mask = torch.sigmoid(attrib)
         mask = (mask > 0.5).float()
         masked_obs = make_obs_grid(obs * mask)
-        self.writer.add_image(prefix + "/masked_obs{}", masked_obs, global_step=step)
+        self.writer.add_image(prefix + "/masked_obs", masked_obs, global_step=step)
+        self.save_image(prefix + "/masked_obs", "masked_obs", masked_obs, step)
+
         attrib_grid = make_obs_grad_grid(torch.sigmoid(attrib))
         self.writer.add_image(
             prefix + "/predicted_attrib", attrib_grid, global_step=step
         )
+        self.save_image(prefix + "/predicted_attrib", "attrib_grid", attrib_grid, step)
         for q in [0.95, 0.975, 0.9, 0.995, 0.999]:
             mask = compute_attribution_mask(obs_grad, quantile=q)
             masked_obs = make_obs_grid(obs * mask)
             self.writer.add_image(
                 prefix + "/attrib_q{}".format(q), masked_obs, global_step=step
             )
+            self.save_image(
+                prefix + "/attrib_q{}".format(q), "masked_obs", masked_obs, step
+            )
+
+    def save_image(self, folder, name, obj, step, plot=False):
+        import os.path as op
+        import os
+        import matplotlib.pyplot as plt
+
+        try:
+            path = op.join("output", folder)
+            if not op.exists(path):
+                os.makedirs(path)
+            filename = op.join(
+                path, name + "_" + str(step) + "_" + str(self.count) + ".png"
+            )
+            if plot is True:
+                print(filename)
+            img = obj.view(obj.shape[-2], obj.shape[-1], 3).cpu().numpy()
+            # if img.max() < 1:
+            #     img = img * 255
+            #     img = img.type(torch.int16)
+            plt.imshow(img)
+            if plot is True:
+                plt.show()
+            plt.imsave(filename, img, dpi=300)
+        except Exception as e:
+            print(f"{e} \nshape: {obj.shape}")
 
     def compute_attribution_loss(self, obs, action, mask):
         mask = mask.float()
@@ -125,8 +161,10 @@ class SGSAC(SAC):
         aux_loss = F.binary_cross_entropy_with_logits(attrib, mask.detach())
         return attrib, aux_loss
 
-    def update(self, replay_buffer, L, step):
-        obs, action, reward, next_obs, not_done = replay_buffer.sample_drq()
+    def update(self, replay_buffer, L, step, count):
+        self.count = count
+        # obs, action, reward, next_obs, not_done = replay_buffer.sample_drq()
+        obs, action, reward, next_obs, not_done = replay_buffer.sample()
 
         self.update_critic(obs, action, reward, next_obs, not_done, L, step)
         obs_grad = compute_attribution(self.critic, obs, action.detach())

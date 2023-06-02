@@ -300,7 +300,12 @@ class CarlaEnv(gym.Env):
 
             if done:
                 break
-        return next_obs.reshape(3, 84, 84), np.mean(rewards), done, info
+        return (
+            next_obs.reshape(3, 84, 84).astype(np.uint8),
+            np.mean(rewards),
+            done,
+            info,
+        )
 
     def _simulator_step(self, action):
         if self.render_display:

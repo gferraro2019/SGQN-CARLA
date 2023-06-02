@@ -62,7 +62,7 @@ def _get_places_batch(batch_size):
 
 
 def sample_frames_from_carla_dataset(x):
-    path_to_dataset = os.path.join(__file__[:-21], "datasets", "noisy_dataset_carla")
+    path_to_dataset = os.path.join(__file__[:-21], "datasets", "carla")
     files = os.listdir(path_to_dataset)
 
     # permute list
@@ -78,7 +78,8 @@ def sample_frames_from_carla_dataset(x):
 def random_overlay(x, dataset="places365_standard"):
     """Randomly overlay an image from Places"""
     global places_iter
-    alpha = np.random.beta(0.2, 0.2)
+    # alpha = np.random.beta(0.2, 0.2)
+    alpha = 0.2
 
     if dataset == "places365_standard":
         if places_dataloader is None:
@@ -86,7 +87,9 @@ def random_overlay(x, dataset="places365_standard"):
         imgs = _get_places_batch(batch_size=x.size(0)).repeat(1, x.size(1) // 3, 1, 1)
 
     elif dataset == "carla":
+        # [0.,255 ]
         imgs = sample_frames_from_carla_dataset(x)
+        imgs = imgs / 255.0
 
     else:
         raise NotImplementedError(
@@ -107,12 +110,12 @@ def attribution_augmentation(x, mask, dataset="places365_standard"):
 
     elif dataset == "carla":
         imgs = sample_frames_from_carla_dataset(x)
+        imgs = imgs / 255.0
 
     else:
         raise NotImplementedError(
             f'overlay has not been implemented for dataset "{dataset}"'
         )
-
     # s_plus = random_conv(x) * mask
     s_plus = x * mask
     s_tilde = (((s_plus) / 255.0) + (imgs * (torch.ones_like(mask) - mask))) * 255.0
@@ -152,7 +155,7 @@ def attribution_random_patch_augmentation(
             1, x.size(1) // 3, 1, 1
         )
     else:
-        raise NotImplementedError(
+        raise NotImplementedErrorpaired_aug(
             f'overlay has not been implemented for dataset "{dataset}"'
         )
     cam = cam.to(x.device)

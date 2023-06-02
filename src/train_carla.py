@@ -8,20 +8,26 @@ from arguments import parse_args
 
 from algorithms.factory import make_agent
 from logger import Logger
-from video import VideoRecorder
+
+# from video import videoRecorder
 
 from utils import load_dataset_for_carla
 from carla_wrapper import CarlaEnv
-from env.wrappers import FrameStack_carla
+from env.wrappers import FrameStack_carla, VideoRecord_carla
+
+
+# def evaluate(
+#     env, agent, algorithm, video, num_episodes, L, step, test_env=False, eval_mode=None
+# ):
 
 
 def evaluate(
-    env, agent, algorithm, video, num_episodes, L, step, test_env=False, eval_mode=None
+    env, agent, algorithm, num_episodes, L, step, test_env=False, eval_mode=None
 ):
     episode_rewards = []
+    # video.init(enabled=True)
     for i in range(num_episodes):
         obs = env.reset()
-        video.init(enabled=(i == 0))
         done = False
         episode_reward = 0
         episode_step = 0
@@ -34,7 +40,7 @@ def evaluate(
 
                 obs, reward, done, _ = env.step(action)
                 # obs = obs.reshape((84, 84, 3))
-                video.record(env)
+                # video.record(env)
                 episode_reward += reward
                 # log in tensorboard 15th step
                 if algorithm == "sgsac":
@@ -61,7 +67,7 @@ def evaluate(
 
         if L is not None:
             _test_env = f"_test_env_{eval_mode}" if test_env else ""
-            video.save(f"{step}{_test_env}.mp4")
+            # video.save(f"{step}{_test_env}.mp4")
             L.log(f"eval/episode_reward{_test_env}", episode_reward, step)
         episode_rewards.append(episode_reward)
 
@@ -127,7 +133,8 @@ def main(args):
                 max_episode_steps,
             )
 
-        # test_env = VideoWrapper(env, cond, 1)
+        # test_env = #videoWrapper(env, cond, 1)
+        test_env = VideoRecord_carla(test_env, args.algorithm)
         test_env = FrameStack_carla(test_env, args.frame_stack)
 
         test_envs.append(test_env)
@@ -146,8 +153,8 @@ def main(args):
     utils.make_dir(work_dir)
 
     model_dir = utils.make_dir(os.path.join(work_dir, "model"))
-    video_dir = utils.make_dir(os.path.join(work_dir, "video"))
-    video = VideoRecorder(video_dir if args.save_video else None, height=448, width=448)
+    # video_dir = utils.make_dir(os.path.join(work_dir, "#video"))
+    # video = #videoRecorder(#video_dir if args.save_#video else None, height=448, width=448)
     utils.write_info(args, os.path.join(work_dir, "info.log"))
 
     # Prepare agent
@@ -195,14 +202,15 @@ def main(args):
             if step % args.eval_freq == 0:
                 print("Evaluating:", work_dir)
                 L.log("eval/episode", episode, step)
-                evaluate(env, agent, args.algorithm, video, args.eval_episodes, L, step)
+                # evaluate(env, agent, args.algorithm, video, args.eval_episodes, L, step)
+                # evaluate(env, agent, args.algorithm, args.eval_episodes, L, step)
                 if test_envs is not None:
                     for test_env, test_env_mode in zip(test_envs, test_envs_mode):
                         evaluate(
                             test_env,
                             agent,
                             args.algorithm,
-                            video,
+                            # video,
                             args.eval_episodes,
                             L,
                             step,
@@ -250,8 +258,8 @@ def main(args):
         # Run training update
         if step >= args.init_steps:
             num_updates = args.init_steps if step == args.init_steps else 1
-            for _ in range(num_updates):
-                agent.update(replay_buffer, L, step)
+            for i in range(num_updates):
+                agent.update(replay_buffer, L, step, i)
 
         # Take step
         next_obs, reward, done, _ = env.step(action)
@@ -269,5 +277,19 @@ def main(args):
 
 if __name__ == "__main__":
     args = parse_args()
+    args.domain_name = "carla"
+    args.task_name = "drive"
+    args.save_video = True
+    path = os.path.join(__file__[:-19], "logs", "carla_drive", "sgsac")
+    if os.path.exists(path):
+        args.seed = (
+            max(
+                map(
+                    int,
+                    os.listdir(path),
+                )
+            )
+            + 1
+        )
 
     main(args)

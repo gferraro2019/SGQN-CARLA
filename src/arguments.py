@@ -10,14 +10,14 @@ def parse_args():
     parser.add_argument("--task_name", default="walk")
     parser.add_argument("--frame_stack", default=3, type=int)
     parser.add_argument("--action_repeat", default=4, type=int)
-    parser.add_argument("--episode_length", default=1000, type=int)
+    parser.add_argument("--episode_length", default=2000, type=int)
     parser.add_argument("--eval_mode", default="color_hard", type=str)
 
     # agent
     parser.add_argument("--algorithm", default="sgsac", type=str)
-    parser.add_argument("--train_steps", default="50k", type=str)
+    parser.add_argument("--train_steps", default="500k", type=str)
     parser.add_argument("--discount", default=0.99, type=float)
-    parser.add_argument("--init_steps", default=1000, type=int)
+    parser.add_argument("--init_steps", default=2000, type=int)
     parser.add_argument("--batch_size", default=128, type=int)
     parser.add_argument("--hidden_dim", default=1024, type=int)
 
@@ -34,7 +34,6 @@ def parse_args():
     parser.add_argument("--critic_tau", default=0.01, type=float)
     parser.add_argument("--critic_target_update_freq", default=2, type=int)
     parser.add_argument("--critic_weight_decay", default=0, type=float)
-    
 
     # architecture
     parser.add_argument("--num_shared_layers", default=11, type=int)
@@ -60,16 +59,16 @@ def parse_args():
     # svea
     parser.add_argument("--svea_alpha", default=0.5, type=float)
     parser.add_argument("--svea_beta", default=0.5, type=float)
-    parser.add_argument("--sgqn_quantile", default=0.90, type=float)
+    parser.add_argument("--sgqn_quantile", default=0.5, type=float)
     parser.add_argument("--svea_contrastive_coeff", default=0.1, type=float)
     parser.add_argument("--svea_norm_coeff", default=0.1, type=float)
     parser.add_argument("--attrib_coeff", default=0.25, type=float)
     parser.add_argument("--consistency", default=1, type=int)
 
     # eval
-    parser.add_argument("--save_freq", default="10k", type=str)
+    parser.add_argument("--save_freq", default="1k", type=str)
     parser.add_argument("--eval_freq", default="1k", type=str)
-    parser.add_argument("--eval_episodes", default=30, type=int)
+    parser.add_argument("--eval_episodes", default=10, type=int)
     parser.add_argument("--distracting_cs_intensity", default=0.0, type=float)
 
     # misc

@@ -272,6 +272,7 @@ class FrameStack_carla(gym.Wrapper):
 
     def __init__(self, env, k):
         gym.Wrapper.__init__(self, env)
+
         self._k = k
         self._frames = deque([], maxlen=k)
         shp = env.observation_space.shape
@@ -299,6 +300,52 @@ class FrameStack_carla(gym.Wrapper):
     def _get_obs(self):
         assert len(self._frames) == self._k
         return utils.LazyFrames(list(self._frames))
+
+
+import os
+import os.path as op
+
+
+class VideoRecord_carla(gym.Wrapper):
+    """Stack frames as observation"""
+
+    def __init__(self, env, name_algorithm, n_episodes=100):
+        gym.Wrapper.__init__(self, env)
+        self.env = env
+        self.count_frame = 0
+        self.episode = -1
+        self.path = op.join("output", "video_records")
+        self.name_algorithm = name_algorithm
+        if not op.exists(self.path):
+            os.makedirs(self.path)
+        self.filename = ""
+        self._max_episode_steps = env._max_episode_steps
+        self.n_episodes = n_episodes
+
+    def reset(self):
+        self.episode += 1
+        self.count_frame = 0
+        return self.env.reset()
+
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        if self.episode % self.n_episodes == 0:
+            self.update_filename()
+            plt.imsave(self.filename, obs.reshape(84, 84, 3), dpi=300)
+            self.count_frame += 1
+
+        return obs, reward, done, info
+
+    def update_filename(self):
+        self.filename = op.join(
+            self.path,
+            self.name_algorithm
+            + "_"
+            + str(self.episode)
+            + "_"
+            + str(self.count_frame)
+            + ".png",
+        )
 
 
 def rgb_to_hsv(r, g, b):
