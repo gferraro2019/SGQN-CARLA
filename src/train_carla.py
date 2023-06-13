@@ -1,31 +1,30 @@
-import torch
 import os
+import sys
+import time
+
 import numpy as np
+import torch
+from PyQt5 import QtCore, QtWidgets
+from tqdm import tqdm
 
 import utils
-import time
-from arguments import parse_args
-
 from algorithms.factory import make_agent
-from logger import Logger
-
-# from video import videoRecorder
-
-from utils import load_dataset_for_carla
+from arguments import parse_args
 from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla, VideoRecord_carla
-
-
-# def evaluate(
-#     env, agent, algorithm, video, num_episodes, L, step, test_env=False, eval_mode=None
-# ):
+from logger import Logger
+from utils import (
+    MainWindow_Reward,
+    MainWindow_Tot_Reward,
+    create_video_from_images,
+    load_dataset_for_carla,
+)
 
 
 def evaluate(
     env, agent, algorithm, num_episodes, L, step, test_env=False, eval_mode=None
 ):
     episode_rewards = []
-    # video.init(enabled=True)
     for i in range(num_episodes):
         obs = env.reset()
         done = False
@@ -39,8 +38,6 @@ def evaluate(
                     action = agent.select_action(obs)
 
                 obs, reward, done, _ = env.step(action)
-                # obs = obs.reshape((84, 84, 3))
-                # video.record(env)
                 episode_reward += reward
                 # log in tensorboard 15th step
                 if algorithm == "sgsac":
@@ -58,37 +55,48 @@ def evaluate(
                             step,
                             prefix=prefix,
                         )
-                    # attrib_grid = make_obs_grad_grid(torch.sigmoid(mask))
-                    # agent.writer.add_image(
-                    #     prefix + "/smooth_attrib", attrib_grid, global_step=step
-                    # )
 
                 episode_step += 1
 
         if L is not None:
             _test_env = f"_test_env_{eval_mode}" if test_env else ""
-            # video.save(f"{step}{_test_env}.mp4")
             L.log(f"eval/episode_reward{_test_env}", episode_reward, step)
         episode_rewards.append(episode_reward)
-
-    return np.mean(episode_rewards)
 
 
 def main(args):
     # Set seed
     utils.set_seed_everywhere(args.seed)
 
-    episode_length = args.episode_length
+    # Create working directory
+    work_dir = os.path.join(
+        "logs", args.domain_name + "_drive", args.algorithm, str(args.seed)
+    )
+
+    print("Working directory:", work_dir)
+    assert not os.path.exists(
+        os.path.join(work_dir, "train.log")
+    ), "specified working directory already exists"
+
+    utils.make_dir(work_dir)
+
+    model_dir = utils.make_dir(os.path.join(work_dir, "model"))
+    utils.write_info(args, os.path.join(work_dir, "info.log"))
+
+    # Define logger
+    L = Logger(work_dir)
+
     frame_skip = 1
-    max_episode_steps = (episode_length + frame_skip - 1) // frame_skip
+    max_episode_steps = (args.episode_length + frame_skip - 1) // frame_skip
 
     load_dataset_for_carla()
 
+    # Create main environment
     env = CarlaEnv(
         True,
         2000,
         0,
-        1,
+        frame_skip,
         "pixel",
         False,
         "tesla.cybertruck",
@@ -97,9 +105,9 @@ def main(args):
         "All",
         max_episode_steps,
     )
-
     env = FrameStack_carla(env, args.frame_stack)
 
+    # Create test environments
     test_envs = []
     test_envs_mode = []
     for cond in ["color_easy"]:  # , "color_hard"]:
@@ -109,7 +117,7 @@ def main(args):
                 True,
                 2003,
                 0,
-                1,
+                frame_skip,
                 "pixel",
                 False,
                 "tesla.cybertruck",
@@ -123,7 +131,7 @@ def main(args):
                 True,
                 2006,
                 0.1,
-                1,
+                frame_skip,
                 "pixel",
                 True,
                 "tesla.cybertruck",
@@ -139,26 +147,6 @@ def main(args):
 
         test_envs.append(test_env)
         test_envs_mode.append(args.eval_mode)
-
-    # Create working directory
-    work_dir = os.path.join(
-        "logs", args.domain_name + "_drive", args.algorithm, str(args.seed)
-    )
-
-    print("Working directory:", work_dir)
-    assert not os.path.exists(
-        os.path.join(work_dir, "train.log")
-    ), "specified working directory already exists"
-
-    utils.make_dir(work_dir)
-
-    model_dir = utils.make_dir(os.path.join(work_dir, "model"))
-    # video_dir = utils.make_dir(os.path.join(work_dir, "#video"))
-    # video = #videoRecorder(#video_dir if args.save_#video else None, height=448, width=448)
-    utils.write_info(args, os.path.join(work_dir, "info.log"))
-
-    # Prepare agent
-    assert torch.cuda.is_available(), "must have cuda enabled"
 
     # Create replay buffer
     replay_buffer = utils.ReplayBuffer(
@@ -177,93 +165,103 @@ def main(args):
     print("Observations:", env.observation_space.shape)
     print("Cropped observations:", cropped_obs_shape)
 
-    # create agent
+    # Create the agent
     agent = make_agent(
         obs_shape=cropped_obs_shape, action_shape=env.action_space.shape, args=args
     )
 
     # Initialize variables
-    start_step, episode, episode_reward, done = 0, 0, 0, True
-
-    # Define logger
-    L = Logger(work_dir)
+    n_episode, episode_reward, done = 0, 0, True
 
     # Start training
     start_time = time.time()
-    for step in range(start_step, args.train_steps + 1):
+    for train_step in tqdm(range(0, args.train_steps + 1)):
         # EVALUATE:
         if done:
-            if step > start_step:
-                L.log("train/duration", time.time() - start_time, step)
-                start_time = time.time()
-                L.dump(step)
+            if train_step > 0:
+                L.log("train/duration", time.time() - start_time, train_step)
+                L.dump(train_step)
+
+                # Save agent periodically
+                if train_step % args.save_freq == 0:
+                    torch.save(
+                        agent.actor.state_dict(),
+                        os.path.join(model_dir, f"actor_{train_step}.pt"),
+                    )
+                    torch.save(
+                        agent.critic.state_dict(),
+                        os.path.join(model_dir, f"critic_{train_step}.pt"),
+                    )
+                    if args.algorithm == "sgsac":
+                        torch.save(
+                            agent.attribution_predictor.state_dict(),
+                            os.path.join(
+                                model_dir, f"attrib_predictor_{train_step}.pt"
+                            ),
+                        )
 
             # Evaluate agent periodically
-            if step % args.eval_freq == 0:
+            if train_step % args.eval_freq == 0:
                 print("Evaluating:", work_dir)
-                L.log("eval/episode", episode, step)
-                # evaluate(env, agent, args.algorithm, video, args.eval_episodes, L, step)
-                # evaluate(env, agent, args.algorithm, args.eval_episodes, L, step)
+                L.log("eval/n_episode", n_episode, train_step)
+                evaluate(env, agent, args.algorithm, args.eval_episodes, L, train_step)
                 if test_envs is not None:
                     for test_env, test_env_mode in zip(test_envs, test_envs_mode):
                         evaluate(
                             test_env,
                             agent,
                             args.algorithm,
-                            # video,
                             args.eval_episodes,
                             L,
-                            step,
+                            train_step,
                             test_env=True,
                             eval_mode=test_env_mode,
                         )
-                L.dump(step)
+                L.dump(train_step)
 
-            # Save agent periodically
-            if step > start_step and step % args.save_freq == 0:
-                torch.save(
-                    agent.actor.state_dict(),
-                    os.path.join(model_dir, f"actor_{step}.pt"),
-                )
-                torch.save(
-                    agent.critic.state_dict(),
-                    os.path.join(model_dir, f"critic_{step}.pt"),
-                )
-                if args.algorithm == "sgsac":
-                    torch.save(
-                        agent.attribution_predictor.state_dict(),
-                        os.path.join(model_dir, f"attrib_predictor_{step}.pt"),
-                    )
-
-            L.log("train/episode_reward", episode_reward, step)
+            L.log("train/episode_reward", episode_reward, train_step)
+            L.log("train/n_episode", n_episode, train_step)
 
             # Reset environment
             obs = env.reset()
             done = False
             episode_reward = 0
             episode_step = 0
+            window_tot_reward.reset_tot_reward()
+            app2.processEvents()
 
-            episode += 1
-
-            L.log("train/episode", episode, step)
+            n_episode += 1
+            start_time = time.time()
 
         # TRAIN:
         # Sample action for data collection
-        if step < args.init_steps:
+        if train_step < args.init_steps:
             action = env.action_space.sample()
         else:
             with utils.eval_mode(agent):
                 action = agent.sample_action(obs)
 
         # Run training update
-        if step >= args.init_steps:
-            num_updates = args.init_steps if step == args.init_steps else 1
+        if train_step >= args.init_steps:
+            num_updates = args.init_steps if train_step == args.init_steps else 1
             for i in range(num_updates):
-                agent.update(replay_buffer, L, step, i)
+                agent.update(replay_buffer, L, train_step, i)
 
-        # Take step
-        next_obs, reward, done, _ = env.step(action)
-        done_bool = 0 if episode_step + 1 == env._max_episode_steps else float(done)
+        # Take train_step
+        cum_reward = 0
+        for _ in range(args.action_repeat):
+            next_obs, reward, done, _ = env.step(action)
+            done_bool = 0 if episode_step + 1 == env._max_episode_steps else float(done)
+            cum_reward += reward
+
+        reward = cum_reward
+
+        # Plot and update reward graph
+        window_reward.update_plot_data(train_step, reward)
+        app1.processEvents()
+
+        window_tot_reward.update_labels(n_episode, reward)
+        app2.processEvents()
 
         # Update replay buffer
         replay_buffer.add(obs, action, reward, next_obs, done_bool)
@@ -273,13 +271,20 @@ def main(args):
         episode_step += 1
 
     print("Completed training for", work_dir)
+    return n_episode
 
 
 if __name__ == "__main__":
+    app1 = QtWidgets.QApplication(sys.argv)
+    window_reward = MainWindow_Reward()
+    window_reward.show()
+
+    app2 = QtWidgets.QApplication(sys.argv)
+    window_tot_reward = MainWindow_Tot_Reward()
+    window_tot_reward.show()
+
     args = parse_args()
-    args.domain_name = "carla"
-    args.task_name = "drive"
-    args.save_video = True
+
     path = os.path.join(__file__[:-19], "logs", "carla_drive", "sgsac")
     if os.path.exists(path):
         args.seed = (
@@ -292,4 +297,10 @@ if __name__ == "__main__":
             + 1
         )
 
-    main(args)
+    n_episodes = main(args)
+
+    # create video from images
+    save_path = os.path.join("output", "video_records", "avi")
+    create_video_from_images(n_episodes, args.episode_length, save_path)
+
+    sys.exit(app1.exec_())
