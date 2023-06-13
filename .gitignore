@@ -1,8 +1,8 @@
 datasets/
 logs/
 out/
-log/
-output/
+log*/
+output*/
 *.zip
 *.ipynb
 
