@@ -3,25 +3,26 @@
 
 # In[1]:
 import glob
+import math
 import os
+import queue
 import random
 import sys
 import time
-import gym
-import pygame
-import numpy as np
-from gym import spaces
+
 import carla
-import queue
-import math
+import gym
+import numpy as np
+import pygame
+from gym import spaces
 
 from utils import (
+    clamp,
+    draw_image,
+    get_actor_name,
     get_font,
     should_quit,
-    draw_image,
     vector_to_scalar,
-    get_actor_name,
-    clamp,
 )
 
 # from agents.navigation.roaming_agent import RoamingAgent
@@ -192,7 +193,9 @@ class CarlaEnv(gym.Env):
         self.world.tick()
         self.count = 0
         self.collision = False
-        obs, _, _, _ = self.step([0, 0])
+        # to let the car to stabilize during its falling caused by the reset
+        for _ in range(100):
+            obs, _, _, _ = self.step([0, 0])
         self.time_step = 0
         return obs
 
