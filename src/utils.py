@@ -1,13 +1,15 @@
-import torch
-import numpy as np
-import os
 import glob
 import json
+import os
 import random
-import augmentations
 import subprocess
 from datetime import datetime
+
+import numpy as np
 import pygame
+import torch
+
+import augmentations
 
 
 class eval_mode(object):
@@ -332,3 +334,146 @@ def load_dataset_for_carla(max_episode_steps=20000, n_frames=10000):
         print(f"... {count_frame} collected.")
     else:
         print(f"Noisy Dataset Carla alredy full.")
+
+
+import os
+import sys  # We need sys so that we can pass argv to QApplication
+from random import randint
+
+import pyqtgraph as pg
+from PyQt5 import QtCore, QtWidgets
+from pyqtgraph import PlotWidget, plot
+
+
+class MainWindow_Reward(QtWidgets.QMainWindow):
+    def __init__(self, *args, **kwargs):
+        super(MainWindow_Reward, self).__init__(*args, **kwargs)
+
+        self.graphWidget = pg.PlotWidget()
+        self.setCentralWidget(self.graphWidget)
+
+        self.x = np.zeros(100)
+        self.y = np.zeros(100)
+        self.idx = 0
+
+        self.graphWidget.setBackground("b")
+
+        pen = pg.mkPen(color=(255, 255, 255))
+        self.data_line = self.graphWidget.plot(self.x, self.y, pen=pen)
+
+        # self.timer = QtCore.QTimer()
+        # self.timer.setInterval(1000)
+        # self.timer.timeout.connect(self.update_plot_data)
+        # self.timer.start()
+
+    def update_plot_data(self, step, reward):
+        if self.idx < 100:
+            self.x[self.idx :] = step
+            self.y[self.idx] = reward
+            self.idx += 1
+        else:
+            self.x = np.roll(self.x, -1)
+            self.x[-1] = step
+            self.y = np.roll(self.y, -1)
+            self.y[-1] = reward
+        self.data_line.setData(self.x, self.y)  # Update the data.
+
+
+import sys
+
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QLabel, QMainWindow, QVBoxLayout, QWidget
+
+
+class MainWindow_Tot_Reward(QMainWindow):
+    def __init__(self):
+        super(MainWindow_Tot_Reward, self).__init__()
+
+        self.episode = 0
+        self.tot_reward = 0
+
+        self.setWindowTitle("My App")
+        widget = QWidget()
+        layout = QVBoxLayout()
+
+        label1 = QLabel("Current Total Reward Episode:")
+        font = label1.font()
+        font.setPointSize(20)
+        label1.setFont(font)
+        label1.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+
+        self.label2 = QLabel(str(self.tot_reward))
+        font = self.label2.font()
+        font.setPointSize(30)
+        self.label2.setFont(font)
+        self.label2.setAlignment(Qt.AlignTop | Qt.AlignRight)
+
+        label3 = QLabel("#Episode:")
+        font = label3.font()
+        font.setPointSize(20)
+        label3.setFont(font)
+        label3.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+
+        self.label4 = QLabel(str(self.episode))
+        font = self.label4.font()
+        font.setPointSize(30)
+        self.label4.setFont(font)
+        self.label4.setAlignment(Qt.AlignTop | Qt.AlignRight)
+
+        layout.addWidget(label3)
+        layout.addWidget(self.label4)
+        layout.addWidget(label1)
+        layout.addWidget(self.label2)
+        widget.setLayout(layout)
+        self.setCentralWidget(widget)
+
+    def update_labels(self, n_episode, reward):
+        self.tot_reward += reward
+        self.label2.setText(str(self.tot_reward))
+        self.label4.setText(str(n_episode))
+
+    def reset_tot_reward(self):
+        self.tot_reward = 0
+
+
+import os
+
+import cv2
+import numpy as np
+
+
+def images_to_video(episode, path_images, save_path, fps=20, width=800, height=600):
+    # Crea un oggetto VideoWriter per scrivere il video
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    video = cv2.VideoWriter(
+        os.path.join(save_path, f"episode_{str(episode)}.mp4"),
+        fourcc,
+        fps,
+        (width, height),
+    )
+
+    for path_img in path_images:
+        #     print(path_img)
+        image = cv2.imread(path_img)
+        video.write(image)
+
+    # Rilascia le risorse
+    video.release()
+
+
+def create_video_from_images(n_episodes, lenght_episode, save_path):
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
+    for episode in range(n_episodes):
+        path_images = []
+        for frame in range(lenght_episode):
+            path_images.append(
+                os.path.join(
+                    "output",
+                    "video_records",
+                    "sgsac_" + str(episode) + "_" + str(frame) + ".png",
+                )
+            )
+
+        images_to_video(episode, path_images, save_path)
