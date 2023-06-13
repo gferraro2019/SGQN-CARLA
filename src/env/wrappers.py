@@ -293,7 +293,7 @@ class FrameStack_carla(gym.Wrapper):
 
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
-        obs = obs.reshape((3, 84, 84))
+        # obs = obs.reshape((3, 84, 84))
         self._frames.append(obs)
         return self._get_obs(), reward, done, info
 
@@ -304,6 +304,7 @@ class FrameStack_carla(gym.Wrapper):
 
 import os
 import os.path as op
+from PIL import Image
 
 
 class VideoRecord_carla(gym.Wrapper):
@@ -329,10 +330,11 @@ class VideoRecord_carla(gym.Wrapper):
 
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
-        if self.episode % self.n_episodes == 0:
-            self.update_filename()
-            plt.imsave(self.filename, obs.reshape(84, 84, 3), dpi=300)
-            self.count_frame += 1
+        # if self.episode % self.n_episodes == 0:
+        self.update_filename()
+        self.save_image(self.filename, obs.reshape(84, 84, 3))
+
+        self.count_frame += 1
 
         return obs, reward, done, info
 
@@ -346,6 +348,11 @@ class VideoRecord_carla(gym.Wrapper):
             + str(self.count_frame)
             + ".png",
         )
+
+    def save_image(self, filename, array, width=800, heigth=600):
+        im = Image.fromarray(array, "RGB")
+        im = im.resize((width, heigth))
+        im.save(filename)
 
 
 def rgb_to_hsv(r, g, b):
