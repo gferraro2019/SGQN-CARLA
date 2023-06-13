@@ -1,23 +1,24 @@
 import os
+import random
 from copy import deepcopy
+
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
-import utils
-import augmentations
 import algorithms.modules as m
+import augmentations
+import utils
 from algorithms.sac import SAC
 
 from .rl_utils import (
     compute_attribution,
     compute_attribution_mask,
     make_attribution_pred_grid,
-    make_obs_grid,
     make_obs_grad_grid,
+    make_obs_grid,
 )
-import random
 
 
 class SGSAC(SAC):
@@ -46,6 +47,7 @@ class SGSAC(SAC):
         )
         self.writer = SummaryWriter(tb_dir)
         self.count = 0
+        self.alpha_blending = args.alpha_blending
 
     def update_critic(self, obs, action, reward, next_obs, not_done, L=None, step=None):
         with torch.no_grad():
@@ -83,7 +85,9 @@ class SGSAC(SAC):
             obs.clone(), mask.float(), "carla"
         )
 
-        s_tilde = augmentations.random_overlay(obs.clone(), "carla")
+        s_tilde = augmentations.random_overlay(
+            obs.clone(), "carla", self.alpha_blending
+        )
         self.aux_optimizer.zero_grad()
         pred_attrib, aux_loss = self.compute_attribution_loss(s_tilde, action, mask)
         aux_loss.backward()
@@ -92,7 +96,7 @@ class SGSAC(SAC):
         if L is not None:
             L.log("train/aux_loss", aux_loss, step)
 
-        if step % 100 == 0:
+        if step % 10000 == 0:
             self.log_tensorboard(obs, action, step, prefix="original")
             self.log_tensorboard(s_tilde, action, step, prefix="augmented")
             self.log_tensorboard(s_prime, action, step, prefix="super_augmented")
@@ -131,8 +135,9 @@ class SGSAC(SAC):
             )
 
     def save_image(self, folder, name, obj, step, plot=False):
-        import os.path as op
         import os
+        import os.path as op
+
         import matplotlib.pyplot as plt
 
         try:
@@ -148,8 +153,8 @@ class SGSAC(SAC):
             # if img.max() < 1:
             #     img = img * 255
             #     img = img.type(torch.int16)
-            plt.imshow(img)
             if plot is True:
+                plt.imshow(img)
                 plt.show()
             plt.imsave(filename, img, dpi=300)
         except Exception as e:

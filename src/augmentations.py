@@ -1,13 +1,14 @@
+import os
+import random
+
+import kornia
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.transforms as TF
 import torchvision.datasets as datasets
+import torchvision.transforms as TF
+
 import utils
-import os
-import kornia
-import random
-import numpy as np
 
 places_dataloader = None
 places_iter = None
@@ -75,11 +76,10 @@ def sample_frames_from_carla_dataset(x):
     return torch.as_tensor(imgs).cuda()
 
 
-def random_overlay(x, dataset="places365_standard"):
+def random_overlay(x, dataset="places365_standard", alpha_blending=0.2):
     """Randomly overlay an image from Places"""
     global places_iter
     # alpha = np.random.beta(0.2, 0.2)
-    alpha = 0.2
 
     if dataset == "places365_standard":
         if places_dataloader is None:
@@ -96,7 +96,7 @@ def random_overlay(x, dataset="places365_standard"):
             f'overlay has not been implemented for dataset "{dataset}"'
         )
 
-    return ((1 - alpha) * (x / 255.0) + (alpha) * imgs) * 255.0
+    return ((1 - alpha_blending) * (x / 255.0) + (alpha_blending) * imgs) * 255.0
 
 
 def attribution_augmentation(x, mask, dataset="places365_standard"):
