@@ -1,4 +1,5 @@
 import argparse
+
 import numpy as np
 
 
@@ -6,18 +7,28 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # environment
-    parser.add_argument("--domain_name", default="walker")
-    parser.add_argument("--task_name", default="walk")
+    parser.add_argument("--domain_name", default="carla")
+    parser.add_argument("--task_name", default="drive")
     parser.add_argument("--frame_stack", default=3, type=int)
     parser.add_argument("--action_repeat", default=4, type=int)
-    parser.add_argument("--episode_length", default=2000, type=int)
-    parser.add_argument("--eval_mode", default="color_hard", type=str)
+    parser.add_argument("--episode_length", default=600, type=int)
+    parser.add_argument("--eval_mode", default="color_easy", type=str)
 
     # agent
     parser.add_argument("--algorithm", default="sgsac", type=str)
-    parser.add_argument("--train_steps", default="500k", type=str)
+    parser.add_argument(
+        "--train_steps",
+        default="600k",
+        type=str,
+        help="the number of steps that the agent will train",
+    )
     parser.add_argument("--discount", default=0.99, type=float)
-    parser.add_argument("--init_steps", default=2000, type=int)
+    parser.add_argument(
+        "--init_steps",
+        default=600,
+        type=int,
+        help="the number of initial steps to take before the agent will be update after each frame",
+    )
     parser.add_argument("--batch_size", default=128, type=int)
     parser.add_argument("--hidden_dim", default=1024, type=int)
 
@@ -66,15 +77,22 @@ def parse_args():
     parser.add_argument("--consistency", default=1, type=int)
 
     # eval
-    parser.add_argument("--save_freq", default="1k", type=str)
-    parser.add_argument("--eval_freq", default="1k", type=str)
-    parser.add_argument("--eval_episodes", default=10, type=int)
+    parser.add_argument("--save_freq", default="6k", type=str)
+    parser.add_argument("--eval_freq", default="6k", type=str)
+    parser.add_argument("--eval_episodes", default=6, type=int)
     parser.add_argument("--distracting_cs_intensity", default=0.0, type=float)
 
     # misc
     parser.add_argument("--seed", default=10081, type=int)
     parser.add_argument("--log_dir", default="logs", type=str)
     parser.add_argument("--save_video", default=False, action="store_true")
+
+    parser.add_argument(
+        "--alpha_blending",
+        default=0.2,
+        type=float,
+        help="the percentage of blending between the true image captured from the camera and a corruption image taken form the dataset",
+    )
 
     args = parser.parse_args()
 
