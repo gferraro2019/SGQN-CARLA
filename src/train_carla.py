@@ -91,15 +91,19 @@ def main(args):
 
     load_dataset_for_carla()
 
+    car = "citroen.c3"
+    car_color = "255, 0, 0"
+
     # Create main environment
     env = CarlaEnv(
-        True,
+        False,
         2000,
         0,
         frame_skip,
         "pixel",
         False,
-        "tesla.cybertruck",
+        car,
+        car_color,
         None,
         False,
         "All",
@@ -120,7 +124,8 @@ def main(args):
                 frame_skip,
                 "pixel",
                 False,
-                "tesla.cybertruck",
+                car,
+                car_color,
                 None,
                 False,
                 "All",
@@ -134,7 +139,8 @@ def main(args):
                 frame_skip,
                 "pixel",
                 True,
-                "tesla.cybertruck",
+                car,
+                car_color,
                 None,
                 False,
                 None,
@@ -224,6 +230,7 @@ def main(args):
 
             # Reset environment
             obs = env.reset()
+            test_env.reset()
             done = False
             episode_reward = 0
             episode_step = 0
@@ -260,7 +267,7 @@ def main(args):
         window_reward.update_plot_data(train_step, reward)
         app1.processEvents()
 
-        window_tot_reward.update_labels(n_episode, reward)
+        window_tot_reward.update_labels(n_episode, reward, action)
         app2.processEvents()
 
         # Update replay buffer

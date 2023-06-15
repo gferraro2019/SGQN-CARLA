@@ -53,6 +53,7 @@ class CarlaEnv(gym.Env):
         observations_type,
         traffic,
         vehicle_name,
+        vehicle_color,
         map_name,
         autopilot,
         unload_map_layer=None,
@@ -65,6 +66,7 @@ class CarlaEnv(gym.Env):
         self.observations_type = observations_type
         self.traffic = traffic
         self.vehicle_name = vehicle_name
+        self.vehicle_color = vehicle_color
         self.map_name = map_name
         self.autopilot = autopilot
         self.actor_list = []
@@ -212,6 +214,9 @@ class CarlaEnv(gym.Env):
                 color = random.choice(
                     vehicle_blueprint.get_attribute("color").recommended_values
                 )
+                if self.vehicle_color is not None:
+                    color = self.vehicle_color
+
                 vehicle_blueprint.set_attribute("color", color)
             self.vehicle = self.world.spawn_actor(
                 vehicle_blueprint, vehicle_init_transform

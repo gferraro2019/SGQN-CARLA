@@ -1,17 +1,19 @@
-import numpy as np
-from numpy.random import randint
 import os
+import random
+from collections import deque
+
+import dmc2gym
 import gym
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
-import dmc2gym
 from dmc2gym.wrappers import DMCWrapper
-import utils
-from collections import deque
-import matplotlib.pyplot as plt
-import random
+from numpy.random import randint
 from PIL import Image
+
+import utils
 
 
 def make_env(
@@ -304,6 +306,8 @@ class FrameStack_carla(gym.Wrapper):
 
 import os
 import os.path as op
+
+import pygame
 from PIL import Image
 
 
@@ -315,10 +319,15 @@ class VideoRecord_carla(gym.Wrapper):
         self.env = env
         self.count_frame = 0
         self.episode = -1
-        self.path = op.join("output", "video_records")
+        self.paths = [
+            op.join("output", "video_records", "camera"),
+            op.join("output", "video_records", "display"),
+        ]
         self.name_algorithm = name_algorithm
-        if not op.exists(self.path):
-            os.makedirs(self.path)
+        for path in self.paths:
+            if not op.exists(path):
+                os.makedirs(path)
+
         self.filename = ""
         self._max_episode_steps = env._max_episode_steps
         self.n_episodes = n_episodes
@@ -331,16 +340,18 @@ class VideoRecord_carla(gym.Wrapper):
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
         # if self.episode % self.n_episodes == 0:
-        self.update_filename()
+        self.update_filename(self.paths[0])
         self.save_image(self.filename, obs.reshape(84, 84, 3))
-
+        if self.render is not False:
+            self.update_filename(self.paths[1])
+            pygame.image.save(self.render_display, self.filename)
         self.count_frame += 1
 
         return obs, reward, done, info
 
-    def update_filename(self):
+    def update_filename(self, path):
         self.filename = op.join(
-            self.path,
+            path,
             self.name_algorithm
             + "_"
             + str(self.episode)
