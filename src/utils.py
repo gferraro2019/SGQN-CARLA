@@ -391,6 +391,8 @@ class MainWindow_Tot_Reward(QMainWindow):
 
         self.episode = 0
         self.tot_reward = 0
+        self.action = [0, 0]
+        self.frame = 0
 
         self.setWindowTitle("My App")
         widget = QWidget()
@@ -420,20 +422,70 @@ class MainWindow_Tot_Reward(QMainWindow):
         self.label4.setFont(font)
         self.label4.setAlignment(Qt.AlignTop | Qt.AlignRight)
 
-        layout.addWidget(label3)
+        label5 = QLabel("(+)Throttle/(-)Brake:")
+        font = label5.font()
+        font.setPointSize(20)
+        label5.setFont(font)
+        label5.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+
+        self.label6 = QLabel(str(self.action[0]))
+        font = self.label6.font()
+        font.setPointSize(30)
+        self.label6.setFont(font)
+        self.label6.setAlignment(Qt.AlignTop | Qt.AlignRight)
+
+        label7 = QLabel("#Steer:")
+        font = label7.font()
+        font.setPointSize(20)
+        label7.setFont(font)
+        label7.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+
+        self.label8 = QLabel(str(self.action[1]))
+        font = self.label8.font()
+        font.setPointSize(30)
+        self.label8.setFont(font)
+        self.label8.setAlignment(Qt.AlignTop | Qt.AlignRight)
+
+        label9 = QLabel("#Frame:")
+        font = label9.font()
+        font.setPointSize(20)
+        label9.setFont(font)
+        label9.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+
+        self.label10 = QLabel(str(self.frame))
+        font = self.label10.font()
+        font.setPointSize(30)
+        self.label10.setFont(font)
+        self.label10.setAlignment(Qt.AlignTop | Qt.AlignRight)
+
+        layout.addWidget(label3)  # episode
         layout.addWidget(self.label4)
-        layout.addWidget(label1)
+        layout.addWidget(label9)  # frame
+        layout.addWidget(self.label10)
+        layout.addWidget(label1)  # tot reward
         layout.addWidget(self.label2)
+        layout.addWidget(label5)  # throttle
+        layout.addWidget(self.label6)
+        layout.addWidget(label7)  # steer
+        layout.addWidget(self.label8)
+
         widget.setLayout(layout)
         self.setCentralWidget(widget)
 
-    def update_labels(self, n_episode, reward):
+    def update_labels(self, n_episode, reward, action):
         self.tot_reward += reward
+        self.action = action
+        self.frame += 1
         self.label2.setText(str(self.tot_reward))
         self.label4.setText(str(n_episode))
+        self.label6.setText(str(self.action[0]))
+        self.label8.setText(str(self.action[1]))
+        self.label10.setText(str(self.frame))
 
     def reset_tot_reward(self):
         self.tot_reward = 0
+        self.action = [0, 0]
+        self.frame = 0
 
 
 import os
