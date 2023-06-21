@@ -1,10 +1,11 @@
+import math
+from functools import partial
 from turtle import forward
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
-from functools import partial
 
 
 def _get_out_shape_cuda(in_shape, layers):
@@ -261,6 +262,25 @@ class Critic(nn.Module):
         return self.Q1(x, action), self.Q2(x, action)
 
 
+class CriticStateDistance(nn.Module):
+    def __init__(
+        self, encoder, action_shape, hidden_dim, state_distance_dim: int = 1
+    ) -> None:
+        super().__init__()
+        self.encoder = encoder
+        self.Q1 = QFunction(
+            self.encoder.out_dim, action_shape[0] + state_distance_dim, hidden_dim
+        )
+        self.Q2 = QFunction(
+            self.encoder.out_dim, action_shape[0] + state_distance_dim, hidden_dim
+        )
+
+    def forward(self, x, action, distance, detach=False):
+        action_and_distance = torch.cat([action, distance], dim=1)
+        x = self.encoder(x, detach)
+        return self.Q1(x, action_and_distance), self.Q2(x, action_and_distance)
+
+
 class CURLHead(nn.Module):
     def __init__(self, encoder):
         super().__init__()
@@ -313,9 +333,9 @@ class SODAPredictor(nn.Module):
 
 
 class AttributionDecoder(nn.Module):
-    def __init__(self,action_shape, emb_dim=100) -> None:
+    def __init__(self, action_shape, emb_dim=100) -> None:
         super().__init__()
-        self.proj = nn.Linear(in_features=emb_dim+action_shape, out_features=14112)
+        self.proj = nn.Linear(in_features=emb_dim + action_shape, out_features=14112)
         self.conv1 = nn.Conv2d(
             in_channels=32, out_channels=128, kernel_size=3, padding=1
         )
@@ -326,7 +346,7 @@ class AttributionDecoder(nn.Module):
         self.conv3 = nn.Conv2d(in_channels=64, out_channels=9, kernel_size=3, padding=1)
 
     def forward(self, x, action):
-        x = torch.cat([x,action],dim=1)
+        x = torch.cat([x, action], dim=1)
         x = self.proj(x).view(-1, 32, 21, 21)
         x = self.relu(x)
         x = self.conv1(x)
@@ -339,16 +359,15 @@ class AttributionDecoder(nn.Module):
         return x
 
 
-
 class AttributionPredictor(nn.Module):
-    def __init__(self, action_shape,encoder, emb_dim=100):
+    def __init__(self, action_shape, encoder, emb_dim=100):
         super().__init__()
         self.encoder = encoder
-        self.decoder = AttributionDecoder(action_shape,encoder.out_dim)
+        self.decoder = AttributionDecoder(action_shape, encoder.out_dim)
         self.features_decoder = nn.Sequential(
             nn.Linear(emb_dim, 256), nn.ReLU(), nn.Linear(256, emb_dim)
         )
 
-    def forward(self, x,action):
+    def forward(self, x, action):
         x = self.encoder(x)
-        return self.decoder(x,action)
+        return self.decoder(x, action)
