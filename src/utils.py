@@ -91,6 +91,201 @@ def prefill_memory(obses, capacity, obs_shape):
     return obses
 
 
+import random
+
+import numpy as np
+import torch
+from carla_dqn import device
+from torch.utils.data import IterableDataset
+
+
+class Replay_Buffer_carla:
+    def __init__(self, capacity=10_000, batch_size=32):
+        self.content = []
+        self.states = torch.empty(0, dtype=torch.float32).to(device)
+        self.actions = torch.empty(0, dtype=torch.int64).to(device)
+        self.rewards = torch.empty(0, dtype=torch.float32).to(device)
+        self.next_states = torch.empty(0, dtype=torch.float32).to(device)
+        self.dones = torch.empty(0, dtype=torch.bool).to(device)
+
+        self.capacity = capacity
+        self.idx = 0
+        self.batch_size = batch_size
+
+    def add(self, observation):
+        if len(self.content) < self.capacity:
+            self.content.append(observation)
+
+            self.states = torch.cat(
+                (self.states, observation[0].unsqueeze(0)),
+                0,
+            )
+            self.actions = torch.cat(
+                (
+                    self.actions,
+                    torch.tensor(observation[1], dtype=torch.float32)
+                    .unsqueeze(0)
+                    .to(device),
+                ),
+                0,
+            )
+            self.rewards = torch.cat(
+                (
+                    self.rewards,
+                    torch.tensor(observation[2], dtype=torch.float32)
+                    .unsqueeze(0)
+                    .to(device),
+                ),
+                0,
+            )
+            self.next_states = torch.cat(
+                (
+                    self.next_states,
+                    torch.tensor(observation[3], dtype=torch.float32)
+                    .unsqueeze(0)
+                    .to(device),
+                ),
+                0,
+            )
+            self.dones = torch.cat(
+                (
+                    self.dones,
+                    torch.tensor(observation[4], dtype=torch.bool)
+                    .unsqueeze(0)
+                    .to(device),
+                ),
+                0,
+            )
+
+        else:
+            self.content[self.idx] = observation
+            self.states[self.idx] = observation[0].to(device)
+            self.actions[self.idx] = torch.tensor(observation[1], dtype=torch.int64).to(
+                device
+            )
+            self.rewards[self.idx] = torch.tensor(
+                observation[2], dtype=torch.float32
+            ).to(device)
+            self.next_states[self.idx] = torch.tensor(
+                observation[3], dtype=torch.float32
+            ).to(device)
+            self.dones[self.idx] = torch.tensor(observation[4], dtype=torch.bool).to(
+                device
+            )
+
+        self.idx = (self.idx + 1) % self.capacity
+
+    def can_sample(self):
+        res = False
+        # if len(self.content) >= self.capacity:
+        if len(self.content) >= self.batch_size * 2:
+            res = True
+        print(f"{len(self.content)} collected")
+        return res
+
+    def sample(self, sample_capacity=None):
+        if self.can_sample():
+            if sample_capacity:
+                idx = random.sample(range(len(self.content)), sample_capacity)
+
+            else:
+                idx = random.sample(range(len(self.content)), self.batch_size)
+            return (
+                self.states[idx],
+                self.actions[idx],
+                self.rewards[idx],
+                self.next_states[idx],
+                self.dones[idx],
+            )
+        else:
+            assert "Can't sample: not enough elements!"
+
+    def shuffle(self, sample_capacity):
+        return random.sample(self.content, sample_capacity)
+
+    def __len__(self):
+        return len(self.content)
+
+
+class RLDataset(IterableDataset):
+    def __init__(self, buffer: Replay_Buffer_carla, sample_size=400) -> None:
+        self.buffer = buffer
+        self.sample_size = sample_size
+
+    def __iter__(self):
+        for experience in self.buffer.shuffle(self.sample_size):
+            yield experience
+
+
+# """
+# class ReplayBuffer_carla(object):
+#     """Buffer to store environment transitions"""
+
+#     def __init__(self, obs_shape, action_shape, capacity, batch_size, prefill=True):
+#         self.capacity = capacity
+#         self.batch_size = batch_size
+
+#         obs_images_shape = obs_shape[0].shape
+#         obs_numbers_shape = obs_shape[1].shape
+#         self.obs = []
+
+#         # self.obs_images = []  # np.ones((self.capacity, *obs_images_shape))
+#         # self.obs_numbers = []  # np.ones((self.capacity, *obs_numbers_shape))
+#         # self.next_obs_images = []  # np.ones((self.capacity, *obs_images_shape))
+#         # self.next_obs_numbers = []  # np.ones((self.capacity, *obs_numbers_shape))
+
+#         self.actions = np.ones((capacity, *action_shape), dtype=np.float32)
+#         self.rewards = np.ones((capacity, 1), dtype=np.float32)
+#         self.not_dones = np.ones((capacity, 1), dtype=np.float32)
+
+#         self.idx = 0
+#         self.full = False
+
+#     def add(self, obs, action, reward, next_obs, done):
+#         obs = (obs,next_obs)
+#         # np.copyto(self.obs_images[self.idx], obs[0])
+#         # np.copyto(self.obs_numbers[self.idx], obs[1:])
+#         # np.copyto(self.next_obs_images[self.idx], obs[0])
+#         # np.copyto(self.next_obs_numbers[self.idx], obs[1:])
+#         if len(self.obs) < self.capacity:
+#             self.obs.append(obs)
+#         else:
+#             self.obs[self.idx] = obs
+
+#         np.copyto(self.actions[self.idx], action)
+#         np.copyto(self.actions[self.idx], action)
+#         np.copyto(self.rewards[self.idx], reward)
+#         np.copyto(self.not_dones[self.idx], not done)
+
+#         self.idx = (self.idx + 1) % self.capacity
+#         self.full = self.full or self.idx == 0
+
+#     def _get_idxs(self, n=None):
+#         if n is None:
+#             n = self.batch_size
+#         return np.random.randint(0, self.capacity if self.full else self.idx, size=n)
+
+#     def sample(self, n=None):
+#         idxs = self._get_idxs(n)
+
+#         obs_images = torch.as_tensor(self.obs_images[idxs]).cuda().float()
+#         obs_numbers = torch.as_tensor(self.obs_numbers[idxs]).cuda().float()
+
+#         obs = torch.cat((obs_images, obs_numbers), dim=0)
+
+#         next_obs_images = torch.as_tensor(next_obs_images[idxs]).cuda().float()
+#         next_obs_numbers = torch.as_tensor(next_obs_numbers[idxs]).cuda().float()
+
+#         next_obs = torch.cat((next_obs_images, next_obs_numbers), dim=0)
+
+#         actions = torch.as_tensor(self.actions[idxs]).cuda()
+#         rewards = torch.as_tensor(self.rewards[idxs]).cuda()
+#         not_dones = torch.as_tensor(self.not_dones[idxs]).cuda()
+
+#         return obs, actions, rewards, next_obs, not_dones
+# """
+
+
 class ReplayBuffer(object):
     """Buffer to store environment transitions"""
 

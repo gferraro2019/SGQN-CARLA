@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument("--eval_mode", default="color_easy", type=str)
 
     # agent
-    parser.add_argument("--algorithm", default="sgsac", type=str)
+    parser.add_argument("--algorithm", default="sac", type=str)
     parser.add_argument(
         "--train_steps",
         default="600k",
