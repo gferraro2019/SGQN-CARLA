@@ -269,6 +269,9 @@ class FrameStack(gym.Wrapper):
         return utils.LazyFrames(list(self._frames))
 
 
+from gym import spaces
+
+
 class FrameStack_carla(gym.Wrapper):
     """Stack frames as observation"""
 
@@ -277,13 +280,15 @@ class FrameStack_carla(gym.Wrapper):
 
         self._k = k
         self._frames = deque([], maxlen=k)
-        shp = env.observation_space.shape
-        self.observation_space = gym.spaces.Box(
-            low=0,
-            high=1,
-            shape=((shp[0] * k,) + shp[1:]),
-            dtype=env.observation_space.dtype,
+        shp = env.observation_space[0].shape
+
+        self.observation_space = spaces.Tuple(
+            (
+                spaces.Box(0, 255, shape=((shp[0] * k,) + shp[1:]), dtype=np.uint8),
+                spaces.Box(-np.inf, np.inf, shape=(2,)),
+            )
         )
+
         self._max_episode_steps = env._max_episode_steps
 
     def reset(self):

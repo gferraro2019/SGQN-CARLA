@@ -132,7 +132,7 @@ class CarlaEnv(gym.Env):
             self.actor_list.append(self.camera_display)
 
         # spawn camera for pixel observations
-        if self.observations_type == "pixel":
+        if "pixel" in self.observations_type:
             bp = blueprint_library.find("sensor.camera.rgb")
             bp.set_attribute("image_size_x", str(84))
             bp.set_attribute("image_size_y", str(84))
@@ -146,13 +146,13 @@ class CarlaEnv(gym.Env):
             self.actor_list.append(self.camera_vision)
 
         # context manager initialization
-        if self.render_display and self.observations_type == "pixel":
+        if self.render_display and "pixel" in self.observations_type:
             self.sync_mode = CarlaSyncMode(
                 self.world, self.camera_display, self.camera_vision, fps=20
             )
         elif self.render_display and self.observations_type == "state":
             self.sync_mode = CarlaSyncMode(self.world, self.camera_display, fps=20)
-        elif not self.render_display and self.observations_type == "pixel":
+        elif not self.render_display and "pixel" in self.observations_type:
             self.sync_mode = CarlaSyncMode(self.world, self.camera_vision, fps=20)
         elif not self.render_display and self.observations_type == "state":
             self.sync_mode = CarlaSyncMode(self.world, fps=20)
@@ -175,18 +175,42 @@ class CarlaEnv(gym.Env):
         #         # initialize autopilot
         #         self.agent = RoamingAgent(self.vehicle)
 
-        # get initial observation
-        if self.observations_type == "state":
-            obs = self._get_state_obs()
-        else:
+        self.observation_space = None
+
+        if self.observations_type == "sgqn_pixel":
             obs = np.zeros((3, 84, 84))
+            dx = 0.0
+            dy = 0.0
+            self.observation_space = spaces.Tuple(
+                (
+                    spaces.Box(0, 255, shape=obs.shape, dtype=np.uint8),
+                    spaces.Box(-np.inf, np.inf, shape=(2,)),
+                )
+            )
+        else:
+            # get initial observation
+            if self.observations_type == "state":
+                obs = self._get_state_obs()
+
+            else:
+                obs = np.zeros((3, 84, 84))
+
+            self.obs_dim = obs.shape
+            self.observation_space = spaces.Box(
+                -np.inf, np.inf, shape=self.obs_dim, dtype="float32"
+            )
 
         # gym environment specific variables
         self.action_space = spaces.Box(-1.0, 1.0, shape=(2,), dtype="float32")
-        self.obs_dim = obs.shape
-        self.observation_space = spaces.Box(
-            -np.inf, np.inf, shape=self.obs_dim, dtype="float32"
-        )
+
+        # Fix a Waypoint
+        self.waypoint = None
+        self._fix_waypoint()
+
+    def _fix_waypoint(self):
+        transform = self.vehicle.get_transform()
+        location = transform.location
+        self.waypoint = self.map.get_waypoint(location, project_to_road=True)
 
     def reset(self):
         self._reset_vehicle()
@@ -195,6 +219,14 @@ class CarlaEnv(gym.Env):
         self.world.tick()
         self.count = 0
         self.collision = False
+
+        # set the car always at the same distance from the waypoint
+        self._fix_waypoint()
+        transform = self.vehicle.get_transform()
+        location = transform.location
+        location.x = self.waypoint.transform.location.x - 2
+        location.y = self.waypoint.transform.location.y - 2
+
         # to let the car to stabilize during its falling caused by the reset
         for _ in range(100):
             obs, _, _, _ = self.step([0, 0])
@@ -309,7 +341,7 @@ class CarlaEnv(gym.Env):
             if done:
                 break
         return (
-            next_obs.reshape(3, 84, 84).astype(np.uint8),
+            next_obs,
             np.mean(rewards),
             done,
             info,
@@ -344,11 +376,11 @@ class CarlaEnv(gym.Env):
         self.vehicle.apply_control(vehicle_control)
 
         # advance the simulation and wait for the data
-        if self.render_display and self.observations_type == "pixel":
+        if self.render_display and "pixel" in self.observations_type:
             snapshot, display_image, vision_image = self.sync_mode.tick(timeout=2.0)
         elif self.render_display and self.observations_type == "state":
             snapshot, display_image = self.sync_mode.tick(timeout=2.0)
-        elif not self.render_display and self.observations_type == "pixel":
+        elif not self.render_display and "pixel" in self.observations_type:
             snapshot, vision_image = self.sync_mode.tick(timeout=2.0)
         elif not self.render_display and self.observations_type == "state":
             self.sync_mode.tick(timeout=2.0)
@@ -385,7 +417,11 @@ class CarlaEnv(gym.Env):
         if self.observations_type == "state":
             next_obs = self._get_state_obs()
         else:
+            # for sgqn_carla add distances to the state
             next_obs = self._get_pixel_obs(vision_image)
+            next_obs = next_obs.reshape(3, 84, 84).astype(np.uint8)
+            dx, dy = self._compute_distance_from_waypoint()
+            next_obs = (next_obs, dx, dy)
 
         # increase frame counter
         self.count += 1
@@ -395,6 +431,19 @@ class CarlaEnv(gym.Env):
             done = True
 
         return next_obs, reward, done, info
+
+    def _compute_distance_from_waypoint(self):
+        transform = self.vehicle.get_transform()
+        location = transform.location
+        # nearest_wp = self.map.get_waypoint(location, project_to_road=True)
+
+        # dx = np.sqrt(location.x - nearest_wp.transform.location.x) ** 2
+        # dy = np.sqrt(location.y - nearest_wp.transform.location.y) ** 2
+
+        dx = np.sqrt(location.x - self.waypoint.transform.location.x) ** 2
+        dy = np.sqrt(location.y - self.waypoint.transform.location.y) ** 2
+
+        return dx, dy
 
     def _get_pixel_obs(self, vision_image):
         bgra = np.array(vision_image.raw_data).reshape(84, 84, 4)
