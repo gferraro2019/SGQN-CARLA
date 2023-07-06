@@ -205,12 +205,17 @@ class CarlaEnv(gym.Env):
 
         # Fix a Waypoint
         self.waypoint = None
-        self._fix_waypoint()
+        # self._fix_waypoint()
 
     def _fix_waypoint(self):
-        transform = self.vehicle.get_transform()
-        location = transform.location
-        self.waypoint = self.map.get_waypoint(location, project_to_road=True)
+        """This function set the global waypoint and return a trasform object of a
+        waypoint placed always 2 m behind the first.
+
+        Returns:
+            transform: the trasfirm object of antecedent waypoint to the global one
+        """
+        self.waypoint = self.world.get_map().get_waypoint_xodr(0, -2, 4)
+        return self.world.get_map().get_waypoint_xodr(0, -2, 2).transform
 
     def reset(self):
         self._reset_vehicle()
@@ -221,17 +226,26 @@ class CarlaEnv(gym.Env):
         self.collision = False
 
         # set the car always at the same distance from the waypoint
-        self._fix_waypoint()
-        transform = self.vehicle.get_transform()
-        location = transform.location
-        location.x = self.waypoint.transform.location.x - 2
-        location.y = self.waypoint.transform.location.y - 2
+        self.vehicle.set_transform(self._fix_waypoint())
+        self.world.tick()
+
+        # self._fix_waypoint()  # second time for placing the global waypoint
 
         # to let the car to stabilize during its falling caused by the reset
         for _ in range(100):
             obs, _, _, _ = self.step([0, 0])
         self.time_step = 0
         return obs
+
+    def generate_waypoints(self):
+        wp_list = []
+        for i in range(100):
+            wp = self.world.get_map().get_waypoint_xodr(0, -2, i)
+            if wp is not None:
+                wp_list.append(wp)
+        points = np.array(
+            [(x.transform.location.x, x.transform.location.y) for x in wp_list]
+        )
 
     def _reset_vehicle(self):
         # choose random spawn point
@@ -421,7 +435,7 @@ class CarlaEnv(gym.Env):
             next_obs = self._get_pixel_obs(vision_image)
             next_obs = next_obs.reshape(3, 84, 84).astype(np.uint8)
             dx, dy = self._compute_distance_from_waypoint()
-            next_obs = (next_obs, dx, dy)
+            next_obs = (next_obs, (dx, dy))
 
         # increase frame counter
         self.count += 1
@@ -440,8 +454,8 @@ class CarlaEnv(gym.Env):
         # dx = np.sqrt(location.x - nearest_wp.transform.location.x) ** 2
         # dy = np.sqrt(location.y - nearest_wp.transform.location.y) ** 2
 
-        dx = np.sqrt(location.x - self.waypoint.transform.location.x) ** 2
-        dy = np.sqrt(location.y - self.waypoint.transform.location.y) ** 2
+        dx = np.sqrt((location.x - self.waypoint.transform.location.x) ** 2)
+        dy = np.sqrt((location.y - self.waypoint.transform.location.y) ** 2)
 
         return dx, dy
 
