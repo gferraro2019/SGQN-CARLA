@@ -264,7 +264,7 @@ class Critic(nn.Module):
 
 class CriticStateDistance(nn.Module):
     def __init__(
-        self, encoder, action_shape, hidden_dim, state_distance_dim: int = 1
+        self, encoder, action_shape, hidden_dim, state_distance_dim: int = 6
     ) -> None:
         super().__init__()
         self.encoder = encoder

@@ -232,7 +232,7 @@ class CarlaEnv(gym.Env):
         # self._fix_waypoint()  # second time for placing the global waypoint
 
         # to let the car to stabilize during its falling caused by the reset
-        for _ in range(100):
+        for _ in range(30):
             obs, _, _, _ = self.step([0, 0])
         self.time_step = 0
         return obs

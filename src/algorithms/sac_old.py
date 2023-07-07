@@ -1,12 +1,10 @@
-from copy import deepcopy
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-import algorithms.modules as m
+from copy import deepcopy
 import utils
+import algorithms.modules as m
 
 
 class FeaturesHook:
@@ -29,7 +27,7 @@ class SAC(object):
         self.critic_target_update_freq = args.critic_target_update_freq
 
         shared_cnn = m.SharedCNN(
-            obs_shape[0], args.num_shared_layers, args.num_filters
+            obs_shape, args.num_shared_layers, args.num_filters
         ).cuda()
         head_cnn = m.HeadCNN(
             shared_cnn.out_shape, args.num_head_layers, args.num_filters
@@ -52,10 +50,7 @@ class SAC(object):
             args.actor_log_std_min,
             args.actor_log_std_max,
         ).cuda()
-
-        self.critic = m.CriticStateDistance(
-            critic_encoder, action_shape, args.hidden_dim
-        ).cuda()
+        self.critic = m.Critic(critic_encoder, action_shape, args.hidden_dim).cuda()
         self.critic_target = deepcopy(self.critic)
 
         self.log_alpha = torch.tensor(np.log(args.init_temperature)).cuda()
@@ -66,10 +61,7 @@ class SAC(object):
             self.actor.parameters(), lr=args.actor_lr, betas=(args.actor_beta, 0.999)
         )
         self.critic_optimizer = torch.optim.Adam(
-            self.critic.parameters(),
-            lr=args.critic_lr,
-            betas=(args.critic_beta, 0.999),
-            weight_decay=args.critic_weight_decay,
+            self.critic.parameters(), lr=args.critic_lr, betas=(args.critic_beta, 0.999),weight_decay=args.critic_weight_decay,
         )
         self.log_alpha_optimizer = torch.optim.Adam(
             [self.log_alpha], lr=args.alpha_lr, betas=(args.alpha_beta, 0.999)
@@ -94,7 +86,6 @@ class SAC(object):
     def _obs_to_input(self, obs):
         if isinstance(obs, utils.LazyFrames):
             _obs = np.array(obs)
-            _obs = np.vstack(_obs[[0, 2, 4]])
         else:
             _obs = obs
         _obs = torch.FloatTensor(_obs).cuda()
@@ -115,14 +106,12 @@ class SAC(object):
 
     def update_critic(self, obs, action, reward, next_obs, not_done, L=None, step=None):
         with torch.no_grad():
-            _, policy_action, log_pi, _ = self.actor(next_obs[0])
-            target_Q1, target_Q2 = self.critic_target(
-                next_obs[0], policy_action, next_obs[1]
-            )
+            _, policy_action, log_pi, _ = self.actor(next_obs)
+            target_Q1, target_Q2 = self.critic_target(next_obs, policy_action)
             target_V = torch.min(target_Q1, target_Q2) - self.alpha.detach() * log_pi
             target_Q = reward + (not_done * self.discount * target_V)
 
-        current_Q1, current_Q2 = self.critic(obs[0], action, obs[1])
+        current_Q1, current_Q2 = self.critic(obs, action)
         critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(
             current_Q2, target_Q
         )
@@ -134,8 +123,8 @@ class SAC(object):
         self.critic_optimizer.step()
 
     def update_actor_and_alpha(self, obs, L=None, step=None, update_alpha=True):
-        _, pi, log_pi, log_std = self.actor(obs[0], detach=True)
-        actor_Q1, actor_Q2 = self.critic(obs[0], pi, obs[1], detach=True)
+        _, pi, log_pi, log_std = self.actor(obs, detach=True)
+        actor_Q1, actor_Q2 = self.critic(obs, pi, detach=True)
 
         actor_Q = torch.min(actor_Q1, actor_Q2)
         actor_loss = (self.alpha.detach() * log_pi - actor_Q).mean()

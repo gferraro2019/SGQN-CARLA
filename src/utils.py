@@ -102,22 +102,54 @@ from torch.utils.data import IterableDataset
 class Replay_Buffer_carla:
     def __init__(self, capacity=10_000, batch_size=32):
         self.content = []
-        self.states = torch.empty(0, dtype=torch.float32).to(device)
+        self.states_img = torch.empty(0, dtype=torch.float32).to(device)
+        self.states_dist = torch.empty(0, dtype=torch.float32).to(device)
         self.actions = torch.empty(0, dtype=torch.int64).to(device)
         self.rewards = torch.empty(0, dtype=torch.float32).to(device)
-        self.next_states = torch.empty(0, dtype=torch.float32).to(device)
+        self.next_states_img = torch.empty(0, dtype=torch.float32).to(device)
+        self.next_states_dist = torch.empty(0, dtype=torch.float32).to(device)
         self.dones = torch.empty(0, dtype=torch.bool).to(device)
 
         self.capacity = capacity
         self.idx = 0
         self.batch_size = batch_size
 
+    def stack(self, observation, side):
+        """This function concatenate numpy array in stacked tensor.
+
+        Args:
+            observation (_type_): _description_
+            side (_type_): 0 for images, 1 for distances
+
+        Returns:
+            _type_: _description_
+        """
+        t = torch.cat(
+            [
+                torch.tensor(observation[0][side], dtype=torch.float32).to(device),
+                torch.tensor(observation[1][side], dtype=torch.float32).to(device),
+                torch.tensor(observation[2][side], dtype=torch.float32).to(device),
+            ]
+        )
+
+        return t.unsqueeze(0).to(device)
+
     def add(self, observation):
         if len(self.content) < self.capacity:
             self.content.append(observation)
 
-            self.states = torch.cat(
-                (self.states, observation[0].unsqueeze(0)),
+            self.states_img = torch.cat(
+                (
+                    self.states_img,
+                    self.stack(observation[0].frames, 0),
+                ),
+                0,
+            )
+            self.states_dist = torch.cat(
+                (
+                    self.states_dist,
+                    self.stack(observation[0].frames, 1),
+                ),
                 0,
             )
             self.actions = torch.cat(
@@ -138,13 +170,12 @@ class Replay_Buffer_carla:
                 ),
                 0,
             )
-            self.next_states = torch.cat(
-                (
-                    self.next_states,
-                    torch.tensor(observation[3], dtype=torch.float32)
-                    .unsqueeze(0)
-                    .to(device),
-                ),
+            self.next_states_img = torch.cat(
+                (self.next_states_img, self.stack(observation[3].frames, 0)),
+                0,
+            )
+            self.next_states_dist = torch.cat(
+                (self.next_states_dist, self.stack(observation[3].frames, 1)),
                 0,
             )
             self.dones = torch.cat(
@@ -159,16 +190,16 @@ class Replay_Buffer_carla:
 
         else:
             self.content[self.idx] = observation
-            self.states[self.idx] = observation[0].to(device)
+            self.states_img[self.idx] = self.stack(observation[0].frames, 0)
+            self.states_dist[self.idx] = self.stack(observation[0].frames, 1)
             self.actions[self.idx] = torch.tensor(observation[1], dtype=torch.int64).to(
                 device
             )
             self.rewards[self.idx] = torch.tensor(
                 observation[2], dtype=torch.float32
             ).to(device)
-            self.next_states[self.idx] = torch.tensor(
-                observation[3], dtype=torch.float32
-            ).to(device)
+            self.next_states_img[self.idx] = self.stack(observation[3].frames, 0)
+            self.next_states_dist[self.idx] = self.stack(observation[3].frames, 1)
             self.dones[self.idx] = torch.tensor(observation[4], dtype=torch.bool).to(
                 device
             )
@@ -191,10 +222,10 @@ class Replay_Buffer_carla:
             else:
                 idx = random.sample(range(len(self.content)), self.batch_size)
             return (
-                self.states[idx],
+                (self.states_img[idx], self.states_dist[idx]),
                 self.actions[idx],
                 self.rewards[idx],
-                self.next_states[idx],
+                (self.next_states_img[idx], self.next_states_dist[idx]),
                 self.dones[idx],
             )
         else:
@@ -217,73 +248,85 @@ class RLDataset(IterableDataset):
             yield experience
 
 
-# """
-# class ReplayBuffer_carla(object):
-#     """Buffer to store environment transitions"""
+class ReplayBuffer_carla(object):
+    """Buffer to store environment transitions"""
 
-#     def __init__(self, obs_shape, action_shape, capacity, batch_size, prefill=True):
-#         self.capacity = capacity
-#         self.batch_size = batch_size
+    def __init__(
+        self,
+        action_shape,
+        capacity,
+        batch_size,
+    ):
+        self.capacity = capacity
+        self.batch_size = batch_size
 
-#         obs_images_shape = obs_shape[0].shape
-#         obs_numbers_shape = obs_shape[1].shape
-#         self.obs = []
+        # obs_images_shape = obs_shape[0].shape
+        # obs_numbers_shape = obs_shape[1].shape
+        self.obs = []
+        self.next_obs = []
 
-#         # self.obs_images = []  # np.ones((self.capacity, *obs_images_shape))
-#         # self.obs_numbers = []  # np.ones((self.capacity, *obs_numbers_shape))
-#         # self.next_obs_images = []  # np.ones((self.capacity, *obs_images_shape))
-#         # self.next_obs_numbers = []  # np.ones((self.capacity, *obs_numbers_shape))
+        # self.obs_images = []  # np.ones((self.capacity, *obs_images_shape))
+        # self.obs_numbers = []  # np.ones((self.capacity, *obs_numbers_shape))
+        # self.next_obs_images = []  # np.ones((self.capacity, *obs_images_shape))
+        # self.next_obs_numbers = []  # np.ones((self.capacity, *obs_numbers_shape))
 
-#         self.actions = np.ones((capacity, *action_shape), dtype=np.float32)
-#         self.rewards = np.ones((capacity, 1), dtype=np.float32)
-#         self.not_dones = np.ones((capacity, 1), dtype=np.float32)
+        self.actions = np.ones((capacity, *action_shape), dtype=np.float32)
+        self.rewards = np.ones((capacity, 1), dtype=np.float32)
+        self.not_dones = np.ones((capacity, 1), dtype=np.float32)
 
-#         self.idx = 0
-#         self.full = False
+        self.idx = 0
+        self.full = False
 
-#     def add(self, obs, action, reward, next_obs, done):
-#         obs = (obs,next_obs)
-#         # np.copyto(self.obs_images[self.idx], obs[0])
-#         # np.copyto(self.obs_numbers[self.idx], obs[1:])
-#         # np.copyto(self.next_obs_images[self.idx], obs[0])
-#         # np.copyto(self.next_obs_numbers[self.idx], obs[1:])
-#         if len(self.obs) < self.capacity:
-#             self.obs.append(obs)
-#         else:
-#             self.obs[self.idx] = obs
+    def add(self, obs, action, reward, next_obs, done):
+        # obs = (obs, next_obs)
+        # np.copyto(self.obs_images[self.idx], obs[0])
+        # np.copyto(self.obs_numbers[self.idx], obs[1:])
+        # np.copyto(self.next_obs_images[self.idx], obs[0])
+        # np.copyto(self.next_obs_numbers[self.idx], obs[1:])
+        if len(self.obs) < self.capacity:
+            self.obs.append(obs)
+            self.next_obs.append(next_obs)
+        else:
+            self.obs[self.idx] = obs
+            self.next_obs[self.idx] = next_obs
 
-#         np.copyto(self.actions[self.idx], action)
-#         np.copyto(self.actions[self.idx], action)
-#         np.copyto(self.rewards[self.idx], reward)
-#         np.copyto(self.not_dones[self.idx], not done)
+        np.copyto(self.actions[self.idx], action)
+        np.copyto(self.actions[self.idx], action)
+        np.copyto(self.rewards[self.idx], reward)
+        np.copyto(self.not_dones[self.idx], not done)
 
-#         self.idx = (self.idx + 1) % self.capacity
-#         self.full = self.full or self.idx == 0
+        self.idx = (self.idx + 1) % self.capacity
+        self.full = self.full or self.idx == 0
 
-#     def _get_idxs(self, n=None):
-#         if n is None:
-#             n = self.batch_size
-#         return np.random.randint(0, self.capacity if self.full else self.idx, size=n)
+    def _get_idxs(self, n=None):
+        if n is None:
+            n = self.batch_size
+        return np.random.randint(0, self.capacity if self.full else self.idx, size=n)
 
-#     def sample(self, n=None):
-#         idxs = self._get_idxs(n)
+    def sample(self, n=None):
+        idxs = self._get_idxs(n)
 
-#         obs_images = torch.as_tensor(self.obs_images[idxs]).cuda().float()
-#         obs_numbers = torch.as_tensor(self.obs_numbers[idxs]).cuda().float()
+        selected_images = tuple(np.take(np.array(self.obs)[:, 0], idxs))
+        selected_numbers = tuple(np.take(np.array(self.obs[:, 1]), idxs))
 
-#         obs = torch.cat((obs_images, obs_numbers), dim=0)
+        # create tensor og tensors
+        obs_images = torch.cat(selected_images).cuda().float()
+        obs_numbers = torch.cat(selected_numbers).cuda().float()
 
-#         next_obs_images = torch.as_tensor(next_obs_images[idxs]).cuda().float()
-#         next_obs_numbers = torch.as_tensor(next_obs_numbers[idxs]).cuda().float()
+        obs = torch.cat((obs_images, obs_numbers), dim=0)
 
-#         next_obs = torch.cat((next_obs_images, next_obs_numbers), dim=0)
+        next_obs_images = torch.cat(np.take(next_obs[:, 0], idxs)).cuda().float()
+        next_obs_numbers = (
+            torch.as_tensor(np.cat(next_obs_numbers[:, 1], idxs)).cuda().float()
+        )
 
-#         actions = torch.as_tensor(self.actions[idxs]).cuda()
-#         rewards = torch.as_tensor(self.rewards[idxs]).cuda()
-#         not_dones = torch.as_tensor(self.not_dones[idxs]).cuda()
+        next_obs = torch.cat((next_obs_images, next_obs_numbers), dim=0)
 
-#         return obs, actions, rewards, next_obs, not_dones
-# """
+        actions = torch.as_tensor(self.actions[idxs]).cuda()
+        rewards = torch.as_tensor(self.rewards[idxs]).cuda()
+        not_dones = torch.as_tensor(self.not_dones[idxs]).cuda()
+
+        return obs, actions, rewards, next_obs, not_dones
 
 
 class ReplayBuffer(object):
@@ -671,11 +714,12 @@ class MainWindow_Tot_Reward(QMainWindow):
         self.tot_reward += reward
         self.action = action
         self.frame += 1
-        self.label2.setText(str(self.tot_reward))
+        # self.label2.setText(str(self.tot_reward))
+        self.label2.setText("{:10.3f}".format(self.tot_reward))
         self.label4.setText(str(n_episode))
-        self.label6.setText(str(self.action[0]))
-        self.label8.setText(str(self.action[1]))
-        self.label10.setText(str(self.frame))
+        self.label6.setText("{:1.3f}".format(self.action[0]))
+        self.label8.setText("{:1.3f}".format(self.action[1]))
+        self.label10.setText(str(self.frame * 4))
 
     def reset_tot_reward(self):
         self.tot_reward = 0

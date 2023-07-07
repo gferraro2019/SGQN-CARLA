@@ -11,7 +11,7 @@ def parse_args():
     parser.add_argument("--task_name", default="drive")
     parser.add_argument("--frame_stack", default=3, type=int)
     parser.add_argument("--action_repeat", default=4, type=int)
-    parser.add_argument("--episode_length", default=600, type=int)
+    parser.add_argument("--episode_length", default=300, type=int)
     parser.add_argument("--eval_mode", default="color_easy", type=str)
 
     # agent
@@ -25,7 +25,7 @@ def parse_args():
     parser.add_argument("--discount", default=0.99, type=float)
     parser.add_argument(
         "--init_steps",
-        default=600,
+        default=300,
         type=int,
         help="the number of initial steps to take before the agent will be update after each frame",
     )
@@ -77,9 +77,9 @@ def parse_args():
     parser.add_argument("--consistency", default=1, type=int)
 
     # eval
-    parser.add_argument("--save_freq", default="6k", type=str)
-    parser.add_argument("--eval_freq", default="6k", type=str)
-    parser.add_argument("--eval_episodes", default=6, type=int)
+    parser.add_argument("--save_freq", default="1k", type=str)
+    parser.add_argument("--eval_freq", default="1k", type=str)
+    parser.add_argument("--eval_episodes", default=1, type=int)
     parser.add_argument("--distracting_cs_intensity", default=0.0, type=float)
 
     # misc

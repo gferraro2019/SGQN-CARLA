@@ -100,7 +100,7 @@ def main(args):
         2000,
         0,
         frame_skip,
-        "pixel",
+        "sgqn_pixel",
         False,
         car,
         car_color,
@@ -122,7 +122,7 @@ def main(args):
                 2003,
                 0,
                 frame_skip,
-                "pixel",
+                "sgqn_pixel",
                 False,
                 car,
                 car_color,
@@ -137,7 +137,7 @@ def main(args):
                 2006,
                 0.1,
                 frame_skip,
-                "pixel",
+                "sgqn_pixel",
                 True,
                 car,
                 car_color,
@@ -155,26 +155,34 @@ def main(args):
         test_envs_mode.append(args.eval_mode)
 
     # Create replay buffer
-    replay_buffer = utils.ReplayBuffer(
-        obs_shape=env.observation_space.shape,
-        action_shape=env.action_space.shape,
+    # replay_buffer = utils.ReplayBuffer_carla(
+    #     action_shape=env.action_space.shape,
+    #     capacity=args.train_steps,
+    #     batch_size=args.batch_size,
+    # )
+
+    replay_buffer = utils.Replay_Buffer_carla(
         capacity=args.train_steps,
         batch_size=args.batch_size,
     )
 
-    # Define observation
-    cropped_obs_shape = (
-        3 * args.frame_stack,
-        args.image_crop_size,
-        args.image_crop_size,
-    )
+    # # Define observation
+    # cropped_obs_shape = (
+    #     3 * args.frame_stack,
+    #     args.image_crop_size,
+    #     args.image_crop_size,
+    # )
     print("Observations:", env.observation_space.shape)
-    print("Cropped observations:", cropped_obs_shape)
+    # print("Cropped observations:", cropped_obs_shape)
+
+    shp = (env.observation_space[0].shape, env.observation_space[1].shape)
+    print("Observations.shapenano:", shp)
 
     # Create the agent
-    agent = make_agent(
-        obs_shape=cropped_obs_shape, action_shape=env.action_space.shape, args=args
-    )
+    agent = make_agent(obs_shape=shp, action_shape=env.action_space.shape, args=args)
+    # agent = make_agent(
+    #     obs_shape=cropped_obs_shape, action_shape=env.action_space.shape, args=args
+    # )
 
     # Initialize variables
     n_episode, episode_reward, done = 0, 0, True
@@ -252,7 +260,7 @@ def main(args):
         if train_step >= args.init_steps:
             num_updates = args.init_steps if train_step == args.init_steps else 1
             for i in range(num_updates):
-                agent.update(replay_buffer, L, train_step, i)
+                agent.update(replay_buffer, L, train_step)
 
         # Take train_step
         cum_reward = 0
@@ -271,7 +279,8 @@ def main(args):
         app2.processEvents()
 
         # Update replay buffer
-        replay_buffer.add(obs, action, reward, next_obs, done_bool)
+        observation = (obs, action, reward, next_obs, done_bool)
+        replay_buffer.add(observation)
 
         episode_reward += reward
         obs = next_obs
@@ -292,7 +301,7 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    path = os.path.join(__file__[:-19], "logs", "carla_drive", "sgsac")
+    path = os.path.join(__file__[:-19], "logs", "carla_drive", "sac")
     if os.path.exists(path):
         args.seed = (
             max(
