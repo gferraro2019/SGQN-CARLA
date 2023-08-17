@@ -11,7 +11,7 @@ def parse_args():
     parser.add_argument("--task_name", default="drive")
     parser.add_argument("--frame_stack", default=3, type=int)
     parser.add_argument("--action_repeat", default=10, type=int)
-    parser.add_argument("--episode_length", default=300, type=int)
+    parser.add_argument("--episode_length", default=100, type=int)
     parser.add_argument("--eval_mode", default="color_easy", type=str)
     parser.add_argument("--capacity", default=300_000, type=str)
 
@@ -19,7 +19,7 @@ def parse_args():
     parser.add_argument("--algorithm", default="sac", type=str)
     parser.add_argument(
         "--train_steps",
-        default="600k",
+        default=500,
         type=str,
         help="the number of steps that the agent will train",
     )
@@ -78,8 +78,8 @@ def parse_args():
     parser.add_argument("--consistency", default=1, type=int)
 
     # eval
-    parser.add_argument("--save_freq", default="1000", type=str)
-    parser.add_argument("--eval_freq", default="1000", type=str)
+    parser.add_argument("--save_freq", default="10", type=str)
+    parser.add_argument("--eval_freq", default="10", type=str)
     parser.add_argument("--eval_episodes", default=2, type=int)
     parser.add_argument("--distracting_cs_intensity", default=0.0, type=float)
 
@@ -128,7 +128,9 @@ def parse_args():
         args.distracting_cs_intensity in intensities
     ), f"distracting_cs has only been implemented for intensities: {intensities}"
 
-    args.train_steps = int(args.train_steps.replace("k", "000"))
+    if type(args.train_steps) is str:
+        args.train_steps = int(args.train_steps.replace("k", "000"))
+
     args.save_freq = int(args.save_freq.replace("k", "000"))
     args.eval_freq = int(args.eval_freq.replace("k", "000"))
 

@@ -25,6 +25,7 @@ def evaluate(
     env, agent, algorithm, n_episodes, L, step, test_env=False, eval_mode=None
 ):
     episode_rewards = []
+
     for n_episode in range(n_episodes):
         obs = env.reset()
         window_tot_reward.reset_tot_reward()
@@ -42,6 +43,7 @@ def evaluate(
                 cum_reward = 0
                 for _ in range(args.action_repeat):
                     obs, reward, done, _ = env.step(action)
+                    episode_step += 1
                     cum_reward += reward
 
                     if done:
@@ -53,7 +55,7 @@ def evaluate(
                 window_reward.update_plot_data(episode_step, episode_reward)
                 app1.processEvents()
 
-                window_tot_reward.update_labels(n_episode, episode_reward, action)
+                window_tot_reward.update_labels(env.episode, episode_reward, action)
                 app2.processEvents()
                 # log in tensorboard 15th step
                 if algorithm == "sgsac":
@@ -71,8 +73,6 @@ def evaluate(
                             step,
                             prefix=prefix,
                         )
-
-                episode_step += 1
 
         if L is not None:
             _test_env = f"_test_env_{eval_mode}" if test_env else ""
@@ -187,6 +187,7 @@ def main(args):
 
     # Initialize variables
     n_episode, episode_reward, done = 0, 0, True
+    evaluated_episodes = []
 
     # Start training
     start_time = time.time()
@@ -194,8 +195,8 @@ def main(args):
         # EVALUATE:
         if done:
             if train_step > 0:
-                L.log("train/duration", time.time() - start_time, train_step)
-                L.dump(train_step)
+                L.log("train/duration", time.time() - start_time, train_step - 1)
+                L.dump(train_step - 1)
 
                 # Save agent periodically
                 if n_episode % args.save_freq == 0 and n_episode > 1:
@@ -216,8 +217,9 @@ def main(args):
             # Evaluate agent periodically
             if n_episode % args.eval_freq == 0:
                 print("Evaluating:", work_dir)
-                L.log("eval/n_episode", n_episode, train_step)
+                L.log("eval/n_episode", n_episode, train_step - 1)
                 # evaluate(env, agent, args.algorithm, args.eval_episodes, L, train_step)
+                test_env.env.episode = n_episode
                 if test_envs is not None:
                     for test_env, test_env_mode in zip(test_envs, test_envs_mode):
                         evaluate(
@@ -226,23 +228,27 @@ def main(args):
                             args.algorithm,
                             args.eval_episodes,
                             L,
-                            train_step,
+                            train_step - 1,
                             test_env=True,
                             eval_mode=test_env_mode,
                         )
-                L.dump(train_step)
+                L.dump(train_step - 1)
 
-            L.log("train/episode_reward", episode_reward, train_step)
-            L.log("train/n_episode", n_episode, train_step)
+                for i in range(args.eval_episodes):
+                    evaluated_episodes.append(n_episode + i)
+
+            L.log("train/episode_reward", episode_reward, train_step - 1)
+            L.log("train/n_episode", n_episode, train_step - 1)
 
             # Reset environment
             obs = env.reset()
-            test_env.reset()
+            # test_env.reset()
             done = False
             episode_reward = 0
             episode_step = 0
             window_tot_reward.reset_tot_reward()
             app2.processEvents()
+
             # free up memory
             torch.cuda.empty_cache()
 
@@ -267,6 +273,7 @@ def main(args):
         cum_reward = 0
         for _ in range(args.action_repeat):
             next_obs, reward, done, _ = env.step(action)
+            episode_step += 1
             done_bool = 0 if episode_step + 1 == env._max_episode_steps else float(done)
             cum_reward += reward
             if done:
@@ -287,10 +294,9 @@ def main(args):
 
         episode_reward += reward
         obs = next_obs
-        episode_step += 1
 
     print("Completed training for", work_dir)
-    return n_episode
+    return evaluated_episodes
 
 
 if __name__ == "__main__":
@@ -316,10 +322,12 @@ if __name__ == "__main__":
             + 1
         )
 
-    n_episodes = main(args)
+    evaluated_episodes = main(args)
 
     # create video from images
     save_path = os.path.join("output", "video_records", "avi")
-    create_video_from_images(n_episodes, args.episode_length, save_path)
+    create_video_from_images(
+        evaluated_episodes, args.algorithm, args.episode_length, save_path
+    )
 
     sys.exit(app1.exec_())

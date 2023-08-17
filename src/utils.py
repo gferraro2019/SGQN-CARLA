@@ -794,19 +794,24 @@ def images_to_video(episode, path_images, save_path, fps=20, width=800, height=6
     video.release()
 
 
-def create_video_from_images(n_episodes, lenght_episode, save_path):
+def create_video_from_images(evalueted_episodes, algorithm, lenght_episode, save_path):
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
-    for episode in range(n_episodes):
+    for episode in evalueted_episodes:
         path_images = []
         for frame in range(lenght_episode):
             path_images.append(
                 os.path.join(
                     "output",
                     "video_records",
-                    "sgsac_" + str(episode) + "_" + str(frame) + ".png",
+                    "display",
+                    algorithm + "_" + str(episode) + "_" + str(frame) + ".png",
                 )
             )
 
         images_to_video(episode, path_images, save_path)
+
+    if len(evalueted_episodes) >= 1:
+        for eps in evalueted_episodes:
+            print(algorithm + "_" + str(eps) + " video has been created.")
