@@ -191,10 +191,13 @@ def main(args):
 
     # Start training
     start_time = time.time()
-    for train_step in tqdm(range(0, args.train_steps + 1)):
+    train_step = 0
+    # for train_step in tqdm(range(0, args.train_steps + 1)):
+    while n_episode < args.n_episodes + 1:
         # EVALUATE:
         if done:
-            if train_step > 0:
+            # if train_step > 0:
+            if n_episode > 0:
                 L.log("train/duration", time.time() - start_time, train_step - 1)
                 L.dump(train_step - 1)
 
@@ -294,6 +297,7 @@ def main(args):
 
         episode_reward += reward
         obs = next_obs
+        train_step += 1
 
     print("Completed training for", work_dir)
     return evaluated_episodes

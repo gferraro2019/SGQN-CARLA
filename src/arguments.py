@@ -11,22 +11,23 @@ def parse_args():
     parser.add_argument("--task_name", default="drive")
     parser.add_argument("--frame_stack", default=3, type=int)
     parser.add_argument("--action_repeat", default=10, type=int)
-    parser.add_argument("--episode_length", default=100, type=int)
+    parser.add_argument("--episode_length", default=300, type=int)
     parser.add_argument("--eval_mode", default="color_easy", type=str)
     parser.add_argument("--capacity", default=300_000, type=str)
+    parser.add_argument("--n_episodes", default=2_000, type=int)
 
     # agent
     parser.add_argument("--algorithm", default="sac", type=str)
     parser.add_argument(
         "--train_steps",
-        default=500,
+        default=601_000,
         type=str,
         help="the number of steps that the agent will train",
     )
     parser.add_argument("--discount", default=0.99, type=float)
     parser.add_argument(
         "--init_steps",
-        default=300,
+        default=1_000,
         type=int,
         help="the number of initial steps to take before the agent will be update after each frame",
     )
@@ -55,7 +56,7 @@ def parse_args():
     parser.add_argument("--encoder_tau", default=0.05, type=float)
 
     # entropy maximization
-    parser.add_argument("--init_temperature", default=0.2, type=float)
+    parser.add_argument("--init_temperature", default=0.3, type=float)
     parser.add_argument("--alpha_lr", default=1e-4, type=float)
     parser.add_argument("--alpha_beta", default=0.5, type=float)
 
@@ -78,8 +79,8 @@ def parse_args():
     parser.add_argument("--consistency", default=1, type=int)
 
     # eval
-    parser.add_argument("--save_freq", default="10", type=str)
-    parser.add_argument("--eval_freq", default="10", type=str)
+    parser.add_argument("--save_freq", default="100", type=str)
+    parser.add_argument("--eval_freq", default="100", type=str)
     parser.add_argument("--eval_episodes", default=2, type=int)
     parser.add_argument("--distracting_cs_intensity", default=0.0, type=float)
 
