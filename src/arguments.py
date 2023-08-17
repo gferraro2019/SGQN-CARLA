@@ -10,9 +10,10 @@ def parse_args():
     parser.add_argument("--domain_name", default="carla")
     parser.add_argument("--task_name", default="drive")
     parser.add_argument("--frame_stack", default=3, type=int)
-    parser.add_argument("--action_repeat", default=4, type=int)
+    parser.add_argument("--action_repeat", default=10, type=int)
     parser.add_argument("--episode_length", default=300, type=int)
     parser.add_argument("--eval_mode", default="color_easy", type=str)
+    parser.add_argument("--capacity", default=300_000, type=str)
 
     # agent
     parser.add_argument("--algorithm", default="sac", type=str)
@@ -54,7 +55,7 @@ def parse_args():
     parser.add_argument("--encoder_tau", default=0.05, type=float)
 
     # entropy maximization
-    parser.add_argument("--init_temperature", default=0.1, type=float)
+    parser.add_argument("--init_temperature", default=0.2, type=float)
     parser.add_argument("--alpha_lr", default=1e-4, type=float)
     parser.add_argument("--alpha_beta", default=0.5, type=float)
 
@@ -77,9 +78,9 @@ def parse_args():
     parser.add_argument("--consistency", default=1, type=int)
 
     # eval
-    parser.add_argument("--save_freq", default="1k", type=str)
-    parser.add_argument("--eval_freq", default="1k", type=str)
-    parser.add_argument("--eval_episodes", default=1, type=int)
+    parser.add_argument("--save_freq", default="1000", type=str)
+    parser.add_argument("--eval_freq", default="1000", type=str)
+    parser.add_argument("--eval_episodes", default=2, type=int)
     parser.add_argument("--distracting_cs_intensity", default=0.0, type=float)
 
     # misc

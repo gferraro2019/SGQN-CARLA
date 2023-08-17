@@ -493,12 +493,32 @@ class CarlaEnv(gym.Env):
             dtype=np.float64,
         )
 
+    # def _get_reward(self):
+    #     vehicle_location = self.vehicle.get_location()
+    #     follow_waypoint_reward = self._get_follow_waypoint_reward(vehicle_location)
+    #     done, collision_reward = self._get_collision_reward()
+    #     cost = self._get_cost()
+    #     total_reward = 100 * follow_waypoint_reward + 100 * collision_reward
+
+    #     info_dict = dict()
+    #     info_dict["follow_waypoint_reward"] = follow_waypoint_reward
+    #     info_dict["collision_reward"] = collision_reward
+    #     info_dict["cost"] = cost
+
+    #     return total_reward, done, info_dict
+
     def _get_reward(self):
         vehicle_location = self.vehicle.get_location()
-        follow_waypoint_reward = self._get_follow_waypoint_reward(vehicle_location)
-        done, collision_reward = self._get_collision_reward()
-        cost = self._get_cost()
-        total_reward = 100 * follow_waypoint_reward + 100 * collision_reward
+
+        distance = np.sqrt(
+            (vehicle_location.x - self.waypoint.transform.location.x) ** 2
+            + (vehicle_location.y - self.waypoint.transform.location.y) ** 2
+        )
+
+        follow_waypoint_reward = -distance
+        done, collision_reward = False, 0
+        cost = 0
+        total_reward = follow_waypoint_reward + collision_reward
 
         info_dict = dict()
         info_dict["follow_waypoint_reward"] = follow_waypoint_reward

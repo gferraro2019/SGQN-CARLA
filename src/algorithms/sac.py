@@ -120,7 +120,9 @@ class SAC(object):
                 next_obs[0], policy_action, next_obs[1]
             )
             target_V = torch.min(target_Q1, target_Q2) - self.alpha.detach() * log_pi
-            target_Q = reward + (not_done * self.discount * target_V)
+            target_Q = reward.unsqueeze(1) + (
+                not_done.unsqueeze(1) * self.discount * target_V
+            )
 
         current_Q1, current_Q2 = self.critic(obs[0], action, obs[1])
         critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(

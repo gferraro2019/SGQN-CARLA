@@ -100,19 +100,28 @@ from torch.utils.data import IterableDataset
 
 
 class Replay_Buffer_carla:
-    def __init__(self, capacity=10_000, batch_size=32):
-        self.content = []
-        self.states_img = torch.empty(0, dtype=torch.float32).to(device)
-        self.states_dist = torch.empty(0, dtype=torch.float32).to(device)
-        self.actions = torch.empty(0, dtype=torch.int64).to(device)
-        self.rewards = torch.empty(0, dtype=torch.float32).to(device)
-        self.next_states_img = torch.empty(0, dtype=torch.float32).to(device)
-        self.next_states_dist = torch.empty(0, dtype=torch.float32).to(device)
-        self.dones = torch.empty(0, dtype=torch.bool).to(device)
+    def __init__(
+        self,
+        capacity=10_000,
+        batch_size=32,
+        state_shape=((9, 84, 84), (1, 2)),
+        action_shape=(1, 2),
+        reward_shape=(1, 1),
+    ):
+        # self.content = []
+        self.states_img = torch.empty(0, dtype=torch.float32).to("cpu")
+        self.states_dist = torch.empty(0, dtype=torch.float32).to("cpu")
+        self.actions = torch.empty(0, dtype=torch.int32).to("cpu")
+        self.rewards = torch.empty(0, dtype=torch.float32).to("cpu")
+        self.next_states_img = torch.empty(0, dtype=torch.float32).to("cpu")
+        self.next_states_dist = torch.empty(0, dtype=torch.float32).to("cpu")
+        self.dones = torch.empty(0, dtype=torch.bool).to("cpu")
 
         self.capacity = capacity
         self.idx = 0
         self.batch_size = batch_size
+
+        assert self.calculate_memory_allocation(state_shape, action_shape, reward_shape)
 
     def stack(self, observation, side):
         """This function concatenate numpy array in stacked tensor.
@@ -126,17 +135,17 @@ class Replay_Buffer_carla:
         """
         t = torch.cat(
             [
-                torch.tensor(observation[0][side], dtype=torch.float32).to(device),
-                torch.tensor(observation[1][side], dtype=torch.float32).to(device),
-                torch.tensor(observation[2][side], dtype=torch.float32).to(device),
+                torch.tensor(observation[0][side], dtype=torch.float32).to("cpu"),
+                torch.tensor(observation[1][side], dtype=torch.float32).to("cpu"),
+                torch.tensor(observation[2][side], dtype=torch.float32).to("cpu"),
             ]
         )
 
-        return t.unsqueeze(0).to(device)
+        return t.unsqueeze(0).to("cpu")
 
     def add(self, observation):
-        if len(self.content) < self.capacity:
-            self.content.append(observation)
+        if len(self) < self.capacity:
+            # self.content.append(observation)
 
             self.states_img = torch.cat(
                 (
@@ -157,7 +166,7 @@ class Replay_Buffer_carla:
                     self.actions,
                     torch.tensor(observation[1], dtype=torch.float32)
                     .unsqueeze(0)
-                    .to(device),
+                    .to("cpu"),
                 ),
                 0,
             )
@@ -166,7 +175,7 @@ class Replay_Buffer_carla:
                     self.rewards,
                     torch.tensor(observation[2], dtype=torch.float32)
                     .unsqueeze(0)
-                    .to(device),
+                    .to("cpu"),
                 ),
                 0,
             )
@@ -183,50 +192,53 @@ class Replay_Buffer_carla:
                     self.dones,
                     torch.tensor(observation[4], dtype=torch.bool)
                     .unsqueeze(0)
-                    .to(device),
+                    .to("cpu"),
                 ),
                 0,
             )
 
         else:
-            self.content[self.idx] = observation
+            # self.content[self.idx] = observation
             self.states_img[self.idx] = self.stack(observation[0].frames, 0)
             self.states_dist[self.idx] = self.stack(observation[0].frames, 1)
-            self.actions[self.idx] = torch.tensor(observation[1], dtype=torch.int64).to(
-                device
+            self.actions[self.idx] = torch.tensor(observation[1], dtype=torch.int32).to(
+                "cpu"
             )
             self.rewards[self.idx] = torch.tensor(
                 observation[2], dtype=torch.float32
-            ).to(device)
+            ).to("cpu")
             self.next_states_img[self.idx] = self.stack(observation[3].frames, 0)
             self.next_states_dist[self.idx] = self.stack(observation[3].frames, 1)
             self.dones[self.idx] = torch.tensor(observation[4], dtype=torch.bool).to(
-                device
+                "cpu"
             )
 
         self.idx = (self.idx + 1) % self.capacity
 
     def can_sample(self):
         res = False
-        # if len(self.content) >= self.capacity:
-        if len(self.content) >= self.batch_size * 2:
+        # if len(self) >= self.capacity:
+        if len(self) >= self.batch_size * 2:
             res = True
-        print(f"{len(self.content)} collected")
+        print(f"{len(self)} collected")
         return res
 
     def sample(self, sample_capacity=None):
         if self.can_sample():
             if sample_capacity:
-                idx = random.sample(range(len(self.content)), sample_capacity)
+                idx = random.sample(range(len(self)), sample_capacity)
 
             else:
-                idx = random.sample(range(len(self.content)), self.batch_size)
+                idx = random.sample(range(len(self)), self.batch_size)
             return (
-                (self.states_img[idx], self.states_dist[idx]),
-                self.actions[idx],
-                self.rewards[idx],
-                (self.next_states_img[idx], self.next_states_dist[idx]),
-                self.dones[idx],
+                (self.states_img[idx].to(device), self.states_dist[idx].to(device)),
+                self.actions[idx].to(device),
+                self.rewards[idx].to(device),
+                (
+                    self.next_states_img[idx].to(device),
+                    self.next_states_dist[idx].to(device),
+                ),
+                self.dones[idx].to(device),
             )
         else:
             assert "Can't sample: not enough elements!"
@@ -234,8 +246,37 @@ class Replay_Buffer_carla:
     def shuffle(self, sample_capacity):
         return random.sample(self.content, sample_capacity)
 
+    def calculate_memory_allocation(self, state_shape, action_shape, reward_shape):
+        n_bytes = 4
+        memory_allocation = self.capacity * state_shape[0][1] * state_shape[0][2]
+        memory_allocation += self.capacity * state_shape[1][1]
+        memory_allocation *= 2  # accounting for next states
+        memory_allocation += self.capacity * action_shape[1]
+        memory_allocation += self.capacity * reward_shape[1]
+        memory_allocation += self.capacity * reward_shape[0]
+        memory_allocation *= n_bytes
+        memory_allocation /= 1e9
+        msg = f"you will need {memory_allocation} GBytes of RAM"
+
+        # Getting all memory using os.popen()
+        total_memory, used_memory, free_memory = map(
+            int, os.popen("free -t -m ").readlines()[-1].split()[1:]
+        )
+
+        if (total_memory - used_memory) / 1000 < memory_allocation:
+            print(msg)
+            # Memory usage
+            print("RAM memory % used:", round((used_memory / total_memory) * 100, 2))
+            print(
+                "RAM memory % available:", round((total_memory - used_memory) / 100, 2)
+            )
+            print("RAM memory % free:", round((free_memory / total_memory) * 100, 2))
+            return False, msg
+        else:
+            return True, msg
+
     def __len__(self):
-        return len(self.content)
+        return self.states_img.shape[0]
 
 
 class RLDataset(IterableDataset):
@@ -710,16 +751,17 @@ class MainWindow_Tot_Reward(QMainWindow):
         widget.setLayout(layout)
         self.setCentralWidget(widget)
 
-    def update_labels(self, n_episode, reward, action):
-        self.tot_reward += reward
+    def update_labels(self, n_episode, cum_reward, action):
+        # self.tot_reward += reward
         self.action = action
         self.frame += 1
         # self.label2.setText(str(self.tot_reward))
-        self.label2.setText("{:10.3f}".format(self.tot_reward))
+        # self.label2.setText("{:10.3f}".format(self.tot_reward))
+        self.label2.setText("{:10.3f}".format(cum_reward))
         self.label4.setText(str(n_episode))
         self.label6.setText("{:1.3f}".format(self.action[0]))
         self.label8.setText("{:1.3f}".format(self.action[1]))
-        self.label10.setText(str(self.frame * 4))
+        self.label10.setText(str(self.frame * 10))
 
     def reset_tot_reward(self):
         self.tot_reward = 0
