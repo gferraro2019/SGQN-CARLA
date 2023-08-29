@@ -13,12 +13,8 @@ from arguments import parse_args
 from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla, VideoRecord_carla
 from logger import Logger
-from utils import (
-    MainWindow_Reward,
-    MainWindow_Tot_Reward,
-    create_video_from_images,
-    load_dataset_for_carla,
-)
+from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
+                   create_video_from_images, load_dataset_for_carla)
 
 
 def evaluate(
@@ -112,7 +108,7 @@ def main(args):
 
     # Create main environment
     env = CarlaEnv(
-        False,
+        True,
         2000,
         0,
         frame_skip,
@@ -122,8 +118,10 @@ def main(args):
         car_color,
         None,
         False,
-        "All",
+        "Custom",  # "All",
         max_episode_steps,
+        lower_limit_cumulative_reward = args.lower_limit_cumulative_reward,
+        #visualize_target=True
     )
     env = FrameStack_carla(env, args.frame_stack)
 
@@ -134,7 +132,7 @@ def main(args):
         if cond == "color_easy":
             # Easy scenario: no traffic, no dyanimc weather, no layers but roads and lighters
             test_env = CarlaEnv(
-                True,
+                False,
                 2003,
                 0,
                 frame_skip,
@@ -144,8 +142,10 @@ def main(args):
                 car_color,
                 None,
                 False,
-                "All",
+                "Custom",  # "All",
                 max_episode_steps,
+                lower_limit_cumulative_reward = args.lower_limit_cumulative_reward,
+                #visualize_target=True
             )
         else:
             # Hard scenario
@@ -162,6 +162,7 @@ def main(args):
                 False,
                 None,
                 max_episode_steps,
+                lower_limit_cumulative_reward = args.lower_limit_cumulative_reward,
             )
 
         # test_env = #videoWrapper(env, cond, 1)
@@ -304,15 +305,18 @@ def main(args):
 
 
 if __name__ == "__main__":
+    
+    np.seterr("ignore")
+    args = parse_args()
+    
     app1 = QtWidgets.QApplication(sys.argv)
     window_reward = MainWindow_Reward()
     window_reward.show()
 
     app2 = QtWidgets.QApplication(sys.argv)
-    window_tot_reward = MainWindow_Tot_Reward()
+    window_tot_reward = MainWindow_Tot_Reward(args.action_repeat)
     window_tot_reward.show()
 
-    args = parse_args()
 
     path = os.path.join(__file__[:-19], "logs", "carla_drive", "sac")
     if os.path.exists(path):

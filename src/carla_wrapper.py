@@ -16,14 +16,8 @@ import numpy as np
 import pygame
 from gym import spaces
 
-from utils import (
-    clamp,
-    draw_image,
-    get_actor_name,
-    get_font,
-    should_quit,
-    vector_to_scalar,
-)
+from utils import (clamp, draw_image, get_actor_name, get_font, should_quit,
+                   vector_to_scalar)
 
 # from agents.navigation.roaming_agent import RoamingAgent
 try:
@@ -58,6 +52,8 @@ class CarlaEnv(gym.Env):
         autopilot,
         unload_map_layer=None,
         max_episode_steps=1000,
+        lower_limit_cumulative_reward=-600,
+        visualize_target = False,
     ):
         super(CarlaEnv, self).__init__()
         self.render_display = render
@@ -74,6 +70,12 @@ class CarlaEnv(gym.Env):
         print(max_episode_steps)
         self._max_episode_steps = int(max_episode_steps)
         self.time_step = 0
+        
+        self.visualize_target = visualize_target
+        
+        # to end the task when the lower limit is reached
+        self.lower_limit_cumulative_reward = lower_limit_cumulative_reward
+        self.cumulative_reward=0
 
         # initialize renderingAttributeError: module 'tensorflow' has no attribute 'contrib'
         if self.render_display:
@@ -100,6 +102,22 @@ class CarlaEnv(gym.Env):
         if unload_map_layer is not None:
             if unload_map_layer == "All":
                 self.world.unload_map_layer(carla.MapLayer.All)
+            elif unload_map_layer == "Custom":
+                layers = {
+                    "Buildings": carla.MapLayer.Buildings,
+                    "Decals": carla.MapLayer.Decals,
+                    "Foliage": carla.MapLayer.Foliage,
+                    "Ground": carla.MapLayer.Ground,
+                    "ParkedVehicles": carla.MapLayer.ParkedVehicles,
+                    "Particles": carla.MapLayer.Particles,
+                    "Props": carla.MapLayer.Props,
+                    "StreetLights": carla.MapLayer.StreetLights,
+                    "Walls": carla.MapLayer.Walls,
+                    "All": carla.MapLayer.All,
+                }
+                for layer, value in layers.items():
+                    if layer not in ["Walls,", "Ground", "Streetlights","All"]:
+                        self.world.unload_map_layer(value)
 
         # remove old vehicles and sensors (in case they survived)
         self.world.tick()
@@ -171,6 +189,19 @@ class CarlaEnv(gym.Env):
             sensor_blueprint, carla.Transform(), attach_to=self.vehicle
         )
         self.collision_sensor.listen(lambda event: self._on_collision(event))
+        
+        
+        # lane invasion detector
+        self.lane_invasion = False
+        sensor_blueprint = self.world.get_blueprint_library().find(
+            "sensor.other.lane_invasion"
+        )
+        self.lane_invasion_sensor = self.world.spawn_actor(
+            sensor_blueprint, carla.Transform(), attach_to=self.vehicle
+        )
+        self.lane_invasion_sensor.listen(lambda event: self._on_lane_invasion(event))
+        self.lane_invasion_reward = 0
+        self.lane_invasion_event = None
 
         #         # initialize autopilot
         #         self.agent = RoamingAgent(self.vehicle)
@@ -206,6 +237,10 @@ class CarlaEnv(gym.Env):
         # Fix a Waypoint
         self.waypoint = None
         # self._fix_waypoint()
+        
+        self.bike = None
+        
+
 
     def _fix_waypoint(self):
         """This function set the global waypoint and return a trasform object of a
@@ -214,8 +249,21 @@ class CarlaEnv(gym.Env):
         Returns:
             transform: the trasfirm object of antecedent waypoint to the global one
         """
-        self.waypoint = self.world.get_map().get_waypoint_xodr(0, -2, 4)
-        return self.world.get_map().get_waypoint_xodr(0, -2, 2).transform
+        self.waypoint = carla.Transform()
+        self.waypoint.location.x = 110
+        self.waypoint.location.y = -15
+        self.waypoint.location.z = 0
+        
+        transform =carla.Transform()
+        transform.location.x = 110
+        transform.location.y = -10
+        transform.location.z = 0
+        transform.rotation.pitch = 0
+        transform.rotation.yaw = 270
+        transform.rotation.roll = 0
+        
+        
+        return transform 
 
     def reset(self):
         self._reset_vehicle()
@@ -227,7 +275,32 @@ class CarlaEnv(gym.Env):
 
         # set the car always at the same distance from the waypoint
         self.vehicle.set_transform(self._fix_waypoint())
+        
         self.world.tick()
+        
+        if self.bike is not None:
+            self.bike.destroy()
+               
+        transform = carla.Transform()
+        if self.visualize_target == True:
+            blueprint_library = self.world.get_blueprint_library()
+            veichles = blueprint_library.filter('vehicle.*.*')
+            
+            bikes_blueprints = [v for v in veichles if v.get_attribute('number_of_wheels').as_int() == 2 ]
+            bike_blueprint = bikes_blueprints[0]
+            bike_blueprint.set_attribute("color",",255,0")
+            transform.location.y =  self.waypoint.location.y
+            transform.location.x =  self.waypoint.location.x
+            transform.location.z =  0
+            
+            transform.rotation.yaw=-180
+            
+            self.bike = self.world.try_spawn_actor(bike_blueprint, transform)
+
+        
+            self.world.tick()
+        
+        print(f"distance = { np.sqrt((transform.location.x - self.vehicle.get_transform().location.x)**2+(transform.location.y - self.vehicle.get_transform().location.y)**2)}")
 
         # self._fix_waypoint()  # second time for placing the global waypoint
 
@@ -235,6 +308,8 @@ class CarlaEnv(gym.Env):
         for _ in range(30):
             obs, _, _, _ = self.step([0, 0])
         self.time_step = 0
+        
+        self.cumulative_reward=0
         return obs
 
     def generate_waypoints(self):
@@ -428,6 +503,10 @@ class CarlaEnv(gym.Env):
 
         # get reward and next observation
         reward, done, info = self._get_reward()
+        
+        # update cumulative reward to interupt if the lower limit is reached
+        self.cumulative_reward+=reward
+        
         if self.observations_type == "state":
             next_obs = self._get_state_obs()
         else:
@@ -441,7 +520,7 @@ class CarlaEnv(gym.Env):
         self.count += 1
         self.time_step += 1
 
-        if self.time_step >= self._max_episode_steps:
+        if self.time_step >= self._max_episode_steps or float(self.cumulative_reward) <= float(self.lower_limit_cumulative_reward):
             done = True
 
         return next_obs, reward, done, info
@@ -454,8 +533,8 @@ class CarlaEnv(gym.Env):
         # dx = np.sqrt(location.x - nearest_wp.transform.location.x) ** 2
         # dy = np.sqrt(location.y - nearest_wp.transform.location.y) ** 2
 
-        dx = np.sqrt((location.x - self.waypoint.transform.location.x) ** 2)
-        dy = np.sqrt((location.y - self.waypoint.transform.location.y) ** 2)
+        dx = np.sqrt((location.x - self.waypoint.location.x) ** 2)
+        dy = np.sqrt((location.y - self.waypoint.location.y) ** 2)
 
         return dx, dy
 
@@ -511,14 +590,25 @@ class CarlaEnv(gym.Env):
         vehicle_location = self.vehicle.get_location()
 
         distance = np.sqrt(
-            (vehicle_location.x - self.waypoint.transform.location.x) ** 2
-            + (vehicle_location.y - self.waypoint.transform.location.y) ** 2
+            (vehicle_location.x - self.waypoint.location.x) ** 2
+            + (vehicle_location.y - self.waypoint.location.y) ** 2
         )
 
-        follow_waypoint_reward = -distance
-        done, collision_reward = False, 0
+        if distance <= 0.1:
+            done, collision_reward = True, 0
+            follow_waypoint_reward = 0
+        else:
+            follow_waypoint_reward = -distance
+            done, collision_reward = False, 0
+            
+        
         cost = 0
-        total_reward = follow_waypoint_reward + collision_reward
+        if self.lane_invasion_reward != 0:
+            total_reward = follow_waypoint_reward + collision_reward + self.lane_invasion_reward
+            self.lane_invasion_reward = 0
+        
+        else:
+            total_reward = follow_waypoint_reward + collision_reward 
 
         info_dict = dict()
         info_dict["follow_waypoint_reward"] = follow_waypoint_reward
@@ -549,6 +639,11 @@ class CarlaEnv(gym.Env):
         other_actor = get_actor_name(event.other_actor)
         self.collision = True
         self._reset_vehicle()
+        
+    def _on_lane_invasion(self,event):
+        self.lane_invasion_event = event
+        print(event.crossed_lane_markings)
+        self.lane_invasion_reward = len(event.crossed_lane_markings) * -100
 
     def close(self):
         for actor in self.actor_list:

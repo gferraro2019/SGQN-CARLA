@@ -220,7 +220,7 @@ class Replay_Buffer_carla:
         # if len(self) >= self.capacity:
         if len(self) >= self.batch_size * 2:
             res = True
-        print(f"{len(self)} collected")
+        #print(f"{len(self)} collected")
         return res
 
     def sample(self, sample_capacity=None):
@@ -665,13 +665,14 @@ from PyQt5.QtWidgets import QLabel, QMainWindow, QVBoxLayout, QWidget
 
 
 class MainWindow_Tot_Reward(QMainWindow):
-    def __init__(self):
+    def __init__(self,action_repeat):
         super(MainWindow_Tot_Reward, self).__init__()
 
         self.episode = 0
         self.tot_reward = 0
         self.action = [0, 0]
         self.frame = 0
+        self.action_repeat = action_repeat
 
         self.setWindowTitle("My App")
         widget = QWidget()
@@ -761,7 +762,7 @@ class MainWindow_Tot_Reward(QMainWindow):
         self.label4.setText(str(n_episode))
         self.label6.setText("{:1.3f}".format(self.action[0]))
         self.label8.setText("{:1.3f}".format(self.action[1]))
-        self.label10.setText(str(self.frame * 10))
+        self.label10.setText(str(self.frame * self.action_repeat))
 
     def reset_tot_reward(self):
         self.tot_reward = 0
