@@ -300,7 +300,9 @@ class CarlaEnv(gym.Env):
         
             self.world.tick()
         
-        print(f"distance = { np.sqrt((transform.location.x - self.vehicle.get_transform().location.x)**2+(transform.location.y - self.vehicle.get_transform().location.y)**2)}")
+            print(f"distance = { np.sqrt((transform.location.x - self.vehicle.get_transform().location.x)**2+(transform.location.y - self.vehicle.get_transform().location.y)**2)}")
+        
+        print(f"distance = { np.sqrt((self.waypoint.location.x - self.vehicle.get_transform().location.x)**2+(self.waypoint.location.y - self.vehicle.get_transform().location.y)**2)}")
 
         # self._fix_waypoint()  # second time for placing the global waypoint
 

@@ -319,14 +319,14 @@ from PIL import Image
 class VideoRecord_carla(gym.Wrapper):
     """Stack frames as observation"""
 
-    def __init__(self, env, name_algorithm, n_episodes=100):
+    def __init__(self, env, name_algorithm,folder=None, n_episodes=100):
         gym.Wrapper.__init__(self, env)
         self.env = env
         self.count_frame = 0
         self.episode = -1
         self.paths = [
-            op.join("output", "video_records", "camera"),
-            op.join("output", "video_records", "display"),
+            op.join("output",str(folder), "video_records", "camera"),
+            op.join("output",str(folder), "video_records", "display"),
         ]
         self.name_algorithm = name_algorithm
         for path in self.paths:

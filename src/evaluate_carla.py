@@ -57,12 +57,13 @@ def main(args):
     # Create the agent
     agent = make_agent(obs_shape=shp, action_shape=env.action_space.shape, args=args)
     
+    folder = 10222
     
     # Load existing actor and critic
-    episodes = [str(i) for i in range(1000,2000,100)]
+    episodes = [str(i) for i in range(100,1100,100)]
     for e in episodes:
-        actor_state_dict = torch.load(f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/10164/model/actor_{e}.pt")
-        critic_state_dict = torch.load(f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/10164/model/critic_{e}.pt")
+        actor_state_dict = torch.load(f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/actor_{e}.pt")
+        critic_state_dict = torch.load(f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/critic_{e}.pt")
         
         print(f"Evaluating actor and critic realted to episode {e}")
         
@@ -116,16 +117,16 @@ def main(args):
 if __name__ == "__main__":
     
     np.seterr("ignore")
+    args = parse_args()
     
     app1 = QtWidgets.QApplication(sys.argv)
     window_reward = MainWindow_Reward()
     window_reward.show()
 
     app2 = QtWidgets.QApplication(sys.argv)
-    window_tot_reward = MainWindow_Tot_Reward()
+    window_tot_reward = MainWindow_Tot_Reward(args.action_repeat)
     window_tot_reward.show()
 
-    args = parse_args()
 
 
 

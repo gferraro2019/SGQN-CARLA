@@ -13,8 +13,8 @@ def parse_args():
     parser.add_argument("--action_repeat", default=5, type=int)
     parser.add_argument("--episode_length", default=300, type=int)
     parser.add_argument("--eval_mode", default="color_easy", type=str)
-    parser.add_argument("--capacity", default=300_000, type=str)
-    parser.add_argument("--n_episodes", default=20_000, type=int)
+    parser.add_argument("--capacity", default=30_000, type=str)
+    parser.add_argument("--n_episodes", default=2_000, type=int)
     parser.add_argument("--lower_limit_cumulative_reward", default=-(300*5), type=float)
 
     # agent
@@ -82,7 +82,7 @@ def parse_args():
     # eval
     parser.add_argument("--save_freq", default="100", type=str)
     parser.add_argument("--eval_freq", default="100", type=str)
-    parser.add_argument("--eval_episodes", default=0, type=int)
+    parser.add_argument("--eval_episodes", default=3, type=int)
     parser.add_argument("--distracting_cs_intensity", default=0.0, type=float)
 
     # misc

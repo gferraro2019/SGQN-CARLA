@@ -108,7 +108,7 @@ def main(args):
 
     # Create main environment
     env = CarlaEnv(
-        True,
+        False,
         2000,
         0,
         frame_skip,
@@ -132,7 +132,7 @@ def main(args):
         if cond == "color_easy":
             # Easy scenario: no traffic, no dyanimc weather, no layers but roads and lighters
             test_env = CarlaEnv(
-                False,
+                True,
                 2003,
                 0,
                 frame_skip,
@@ -166,7 +166,7 @@ def main(args):
             )
 
         # test_env = #videoWrapper(env, cond, 1)
-        test_env = VideoRecord_carla(test_env, args.algorithm)
+        test_env = VideoRecord_carla(test_env, args.algorithm,args.seed)
         test_env = FrameStack_carla(test_env, args.frame_stack)
 
         test_envs.append(test_env)
@@ -330,12 +330,22 @@ if __name__ == "__main__":
             + 1
         )
 
-    evaluated_episodes = main(args)
-
-    # create video from images
-    save_path = os.path.join("output", "video_records", "avi")
-    create_video_from_images(
-        evaluated_episodes, args.algorithm, args.episode_length, save_path
-    )
-
-    sys.exit(app1.exec_())
+    try:
+        evaluated_episodes = main(args)
+        
+        # create video from images
+        save_path = os.path.join("output", str(args.seed),"video_records", "avi")
+        images_path = os.path.join("output", str(args.seed),"video_records", "display")
+        
+        create_video_from_images(
+            evaluated_episodes, args.algorithm, args.episode_length, images_path,save_path
+        )
+        
+    except Exception as e:
+        print(e)
+        from IPython import embed
+        embed()
+        
+        
+    finally:        
+        sys.exit(app1.exec_())
