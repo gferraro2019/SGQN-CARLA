@@ -1,11 +1,11 @@
-from algorithms.sac import SAC
-from algorithms.rad import RAD
 from algorithms.curl import CURL
-from algorithms.pad import PAD
-from algorithms.soda import SODA
 from algorithms.drq import DrQ
-from algorithms.svea import SVEA
+from algorithms.pad import PAD
+from algorithms.rad import RAD
+from algorithms.sac import SAC
 from algorithms.sgsac import SGSAC
+from algorithms.soda import SODA
+from algorithms.svea import SVEA
 
 algorithm = {
     "sac": SAC,

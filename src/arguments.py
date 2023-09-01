@@ -15,7 +15,9 @@ def parse_args():
     parser.add_argument("--eval_mode", default="color_easy", type=str)
     parser.add_argument("--capacity", default=30_000, type=str)
     parser.add_argument("--n_episodes", default=2_000, type=int)
-    parser.add_argument("--lower_limit_cumulative_reward", default=-(300*5), type=float)
+    parser.add_argument(
+        "--lower_limit_cumulative_reward", default=-(300 * 5), type=float
+    )
 
     # agent
     parser.add_argument("--algorithm", default="sac", type=str)

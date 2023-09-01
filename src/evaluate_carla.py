@@ -13,8 +13,12 @@ from arguments import parse_args
 from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla, VideoRecord_carla
 from logger import Logger
-from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
-                   create_video_from_images, load_dataset_for_carla)
+from utils import (
+    MainWindow_Reward,
+    MainWindow_Tot_Reward,
+    create_video_from_images,
+    load_dataset_for_carla,
+)
 
 
 def main(args):
@@ -43,11 +47,9 @@ def main(args):
         False,
         "Custom",  # "All",
         max_episode_steps,
-        lower_limit_cumulative_reward = args.lower_limit_cumulative_reward,
+        lower_limit_cumulative_reward=args.lower_limit_cumulative_reward,
     )
     env = FrameStack_carla(env, args.frame_stack)
-
-   
 
     print("Observations:", env.observation_space.shape)
 
@@ -56,21 +58,24 @@ def main(args):
 
     # Create the agent
     agent = make_agent(obs_shape=shp, action_shape=env.action_space.shape, args=args)
-    
+
     folder = 10222
-    
+
     # Load existing actor and critic
-    episodes = [str(i) for i in range(100,1100,100)]
+    episodes = [str(i) for i in range(100, 1100, 100)]
     for e in episodes:
-        actor_state_dict = torch.load(f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/actor_{e}.pt")
-        critic_state_dict = torch.load(f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/critic_{e}.pt")
-        
+        actor_state_dict = torch.load(
+            f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/actor_{e}.pt"
+        )
+        critic_state_dict = torch.load(
+            f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/critic_{e}.pt"
+        )
+
         print(f"Evaluating actor and critic realted to episode {e}")
-        
+
         agent.actor.load_state_dict(actor_state_dict)
         agent.critic.load_state_dict(critic_state_dict)
 
-        
         # EVALUATE:
 
         episode_rewards = []
@@ -105,20 +110,19 @@ def main(args):
                     window_tot_reward.update_labels(n_episode, episode_reward, action)
                     app2.processEvents()
 
-
             episode_rewards.append(episode_reward)
-            
+
         import matplotlib.pyplot as plt
+
         plt.plot(episode_rewards)
-        #plt.title(f"Evaluating actor and critic realted to episode {e}")
-        #plt.show()
+        # plt.title(f"Evaluating actor and critic realted to episode {e}")
+        # plt.show()
 
 
 if __name__ == "__main__":
-    
     np.seterr("ignore")
     args = parse_args()
-    
+
     app1 = QtWidgets.QApplication(sys.argv)
     window_reward = MainWindow_Reward()
     window_reward.show()
@@ -126,9 +130,6 @@ if __name__ == "__main__":
     app2 = QtWidgets.QApplication(sys.argv)
     window_tot_reward = MainWindow_Tot_Reward(args.action_repeat)
     window_tot_reward.show()
-
-
-
 
     main(args)
 

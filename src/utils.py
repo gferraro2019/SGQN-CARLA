@@ -220,7 +220,7 @@ class Replay_Buffer_carla:
         # if len(self) >= self.capacity:
         if len(self) >= self.batch_size * 2:
             res = True
-        #print(f"{len(self)} collected")
+        # print(f"{len(self)} collected")
         return res
 
     def sample(self, sample_capacity=None):
@@ -665,7 +665,7 @@ from PyQt5.QtWidgets import QLabel, QMainWindow, QVBoxLayout, QWidget
 
 
 class MainWindow_Tot_Reward(QMainWindow):
-    def __init__(self,action_repeat):
+    def __init__(self, action_repeat):
         super(MainWindow_Tot_Reward, self).__init__()
 
         self.episode = 0
@@ -795,7 +795,9 @@ def images_to_video(episode, path_images, save_path, fps=20, width=800, height=6
     video.release()
 
 
-def create_video_from_images(evalueted_episodes, algorithm, lenght_episode, images_path, save_path):
+def create_video_from_images(
+    evalueted_episodes, algorithm, lenght_episode, images_path, save_path
+):
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
@@ -803,8 +805,8 @@ def create_video_from_images(evalueted_episodes, algorithm, lenght_episode, imag
         path_images = []
         for frame in range(lenght_episode):
             path_images.append(
-                os.path.join(images_path,
-
+                os.path.join(
+                    images_path,
                     algorithm + "_" + str(episode) + "_" + str(frame) + ".png",
                 )
             )
@@ -812,5 +814,4 @@ def create_video_from_images(evalueted_episodes, algorithm, lenght_episode, imag
         images_to_video(episode, path_images, save_path)
 
         if len(evalueted_episodes) >= 1:
-            
             print(algorithm + "_" + str(episode) + " video has been created.")

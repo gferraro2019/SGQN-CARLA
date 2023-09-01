@@ -13,8 +13,12 @@ from arguments import parse_args
 from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla, VideoRecord_carla
 from logger import Logger
-from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
-                   create_video_from_images, load_dataset_for_carla)
+from utils import (
+    MainWindow_Reward,
+    MainWindow_Tot_Reward,
+    create_video_from_images,
+    load_dataset_for_carla,
+)
 
 
 def evaluate(
@@ -120,8 +124,8 @@ def main(args):
         False,
         "Custom",  # "All",
         max_episode_steps,
-        lower_limit_cumulative_reward = args.lower_limit_cumulative_reward,
-        #visualize_target=True
+        lower_limit_cumulative_reward=args.lower_limit_cumulative_reward,
+        # visualize_target=True
     )
     env = FrameStack_carla(env, args.frame_stack)
 
@@ -144,8 +148,8 @@ def main(args):
                 False,
                 "Custom",  # "All",
                 max_episode_steps,
-                lower_limit_cumulative_reward = args.lower_limit_cumulative_reward,
-                #visualize_target=True
+                lower_limit_cumulative_reward=args.lower_limit_cumulative_reward,
+                # visualize_target=True
             )
         else:
             # Hard scenario
@@ -162,11 +166,11 @@ def main(args):
                 False,
                 None,
                 max_episode_steps,
-                lower_limit_cumulative_reward = args.lower_limit_cumulative_reward,
+                lower_limit_cumulative_reward=args.lower_limit_cumulative_reward,
             )
 
         # test_env = #videoWrapper(env, cond, 1)
-        test_env = VideoRecord_carla(test_env, args.algorithm,args.seed)
+        test_env = VideoRecord_carla(test_env, args.algorithm, args.seed)
         test_env = FrameStack_carla(test_env, args.frame_stack)
 
         test_envs.append(test_env)
@@ -305,10 +309,9 @@ def main(args):
 
 
 if __name__ == "__main__":
-    
     np.seterr("ignore")
     args = parse_args()
-    
+
     app1 = QtWidgets.QApplication(sys.argv)
     window_reward = MainWindow_Reward()
     window_reward.show()
@@ -316,7 +319,6 @@ if __name__ == "__main__":
     app2 = QtWidgets.QApplication(sys.argv)
     window_tot_reward = MainWindow_Tot_Reward(args.action_repeat)
     window_tot_reward.show()
-
 
     path = os.path.join(__file__[:-19], "logs", "carla_drive", "sac")
     if os.path.exists(path):
@@ -332,20 +334,24 @@ if __name__ == "__main__":
 
     try:
         evaluated_episodes = main(args)
-        
+
         # create video from images
-        save_path = os.path.join("output", str(args.seed),"video_records", "avi")
-        images_path = os.path.join("output", str(args.seed),"video_records", "display")
-        
+        save_path = os.path.join("output", str(args.seed), "video_records", "avi")
+        images_path = os.path.join("output", str(args.seed), "video_records", "display")
+
         create_video_from_images(
-            evaluated_episodes, args.algorithm, args.episode_length, images_path,save_path
+            evaluated_episodes,
+            args.algorithm,
+            args.episode_length,
+            images_path,
+            save_path,
         )
-        
+
     except Exception as e:
         print(e)
         from IPython import embed
+
         embed()
-        
-        
-    finally:        
+
+    finally:
         sys.exit(app1.exec_())
