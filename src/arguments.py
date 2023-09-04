@@ -11,12 +11,12 @@ def parse_args():
     parser.add_argument("--task_name", default="drive")
     parser.add_argument("--frame_stack", default=3, type=int)
     parser.add_argument("--action_repeat", default=5, type=int)
-    parser.add_argument("--episode_length", default=300, type=int)
+    parser.add_argument("--episode_length", default=1000, type=int)
     parser.add_argument("--eval_mode", default="color_easy", type=str)
-    parser.add_argument("--capacity", default=30_000, type=str)
+    parser.add_argument("--capacity", default=100_000, type=str)
     parser.add_argument("--n_episodes", default=2_000, type=int)
     parser.add_argument(
-        "--lower_limit_cumulative_reward", default=-(300 * 5), type=float
+        "--lower_limit_cumulative_reward", default=-(1000 * 5), type=float
     )
 
     # agent

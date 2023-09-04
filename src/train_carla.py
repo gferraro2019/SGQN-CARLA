@@ -197,8 +197,8 @@ def main(args):
     # Start training
     start_time = time.time()
     train_step = 0
-    # for train_step in tqdm(range(0, args.train_steps + 1)):
-    while n_episode < args.n_episodes + 1:
+    for train_step in tqdm(range(0, args.train_steps + 1)):
+        # while n_episode < args.n_episodes + 1:
         # EVALUATE:
         if done:
             # if train_step > 0:
@@ -223,7 +223,7 @@ def main(args):
                         )
 
             # Evaluate agent periodically
-            if n_episode % args.eval_freq == 0:
+            if n_episode % args.eval_freq == 0 and n_episode > 0:
                 print("Evaluating:", work_dir)
                 L.log("eval/n_episode", n_episode, train_step - 1)
                 # evaluate(env, agent, args.algorithm, args.eval_episodes, L, train_step)

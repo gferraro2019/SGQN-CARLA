@@ -59,16 +59,16 @@ def main(args):
     # Create the agent
     agent = make_agent(obs_shape=shp, action_shape=env.action_space.shape, args=args)
 
-    folder = 10222
+    folder = 10143
 
     # Load existing actor and critic
-    episodes = [str(i) for i in range(100, 1100, 100)]
+    episodes = [str(i) for i in range(100, 2600, 100)]
     for e in episodes:
         actor_state_dict = torch.load(
-            f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/actor_{e}.pt"
+            f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/src/logs/carla_drive/sac/{folder}/model/actor_{e}.pt"
         )
         critic_state_dict = torch.load(
-            f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/critic_{e}.pt"
+            f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/src/logs/carla_drive/sac/{folder}/model/critic_{e}.pt"
         )
 
         print(f"Evaluating actor and critic realted to episode {e}")
@@ -80,7 +80,7 @@ def main(args):
 
         episode_rewards = []
 
-        for n_episode in range(5):
+        for n_episode in range(2):
             obs = env.reset()
             window_tot_reward.reset_tot_reward()
             app2.processEvents()
