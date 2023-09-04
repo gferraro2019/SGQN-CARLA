@@ -43,7 +43,16 @@ except IndexError:
 # In[2]:
 
 
+from scipy.special import expit as sigmoid
+
+
 class CarlaEnv(gym.Env):
+    """This class define a Carla environment.
+
+    Args:
+        gym (_type_): _description_
+    """
+
     def __init__(
         self,
         render,
@@ -61,6 +70,27 @@ class CarlaEnv(gym.Env):
         lower_limit_cumulative_reward=-600,
         visualize_target=False,
     ):
+        """This function initialize the Carla enviroment.
+
+        Args:
+            render (boolean): whether or not to show the display window of the environment.
+            carla_port (int): the number of the port of the server to connect the client.
+            changing_weather_speed (_type_): _description_
+            frame_skip (int): number of frames to skip.
+            observations_type (_type_): _description_
+            traffic (boolean): whether or not to add traffic int the environment.
+            vehicle_name (str): name of the vehicle. ie.("tesla","c3")
+            vehicle_color (tuple(int,int,int)): RGB tuple.
+            map_name (str): the name of the map. ie.("map 01")
+            autopilot (boolean): whether or not to activate the autopilot for the ego vehicle.
+            unload_map_layer (str optional): whether or not to remove some layer from the map. "All" leave everything as it is, "custom" use customized layers. Defaults to None.
+            max_episode_steps (int, optional): the lenght of the episode in frames. Defaults to 1000.
+            lower_limit_cumulative_reward (int, optional): The lowest cumulative reward possible. Defaults to -600.
+            visualize_target (bool, optional): whether or not to show the waypoint in the environment. Defaults to False.
+
+        Raises:
+            ValueError: _description_
+        """
         super(CarlaEnv, self).__init__()
         self.render_display = render
         self.changing_weather_speed = float(changing_weather_speed)
@@ -138,7 +168,7 @@ class CarlaEnv(gym.Env):
         # create vehicle
         self.vehicle = None
         self.vehicles_list = []
-        self._reset_vehicle()
+        self._reset_vehicle(from_fixed_point=True)
         self.actor_list.append(self.vehicle)
 
         # initialize blueprint library
@@ -256,6 +286,9 @@ class CarlaEnv(gym.Env):
         self.waypoint.location.x = 110
         self.waypoint.location.y = -15
         self.waypoint.location.z = 0
+        self.waypoint.rotation.pitch = 0
+        self.waypoint.rotation.yaw = 270
+        self.waypoint.rotation.roll = 0
 
         transform = carla.Transform()
         transform.location.x = 110
@@ -268,17 +301,19 @@ class CarlaEnv(gym.Env):
         return transform
 
     def reset(self):
-        self._reset_vehicle()
+        # to avoid influnces from the former episode (angular momentun preserved)
+        if self.vehicle is not None:
+            self.vehicle.destroy()
+            self.vehicle = None
+
+        self._reset_vehicle(from_fixed_point=True)
         self.world.tick()
+
         self._reset_other_vehicles()
         self.world.tick()
+
         self.count = 0
         self.collision = False
-
-        # set the car always at the same distance from the waypoint
-        self.vehicle.set_transform(self._fix_waypoint())
-
-        self.world.tick()
 
         if self.bike is not None:
             self.bike.destroy()
@@ -331,7 +366,7 @@ class CarlaEnv(gym.Env):
             [(x.transform.location.x, x.transform.location.y) for x in wp_list]
         )
 
-    def _reset_vehicle(self):
+    def _reset_vehicle(self, from_fixed_point=False):
         # choose random spawn point
         init_transforms = self.world.get_map().get_spawn_points()
         vehicle_init_transform = random.choice(init_transforms)
@@ -341,18 +376,21 @@ class CarlaEnv(gym.Env):
             blueprint_library = self.world.get_blueprint_library()
             vehicle_blueprint = blueprint_library.find("vehicle." + self.vehicle_name)
             if vehicle_blueprint.has_attribute("color"):
-                color = random.choice(
-                    vehicle_blueprint.get_attribute("color").recommended_values
-                )
                 if self.vehicle_color is not None:
                     color = self.vehicle_color
+                else:
+                    color = random.choice(
+                        vehicle_blueprint.get_attribute("color").recommended_values
+                    )
 
                 vehicle_blueprint.set_attribute("color", color)
-            self.vehicle = self.world.spawn_actor(
-                vehicle_blueprint, vehicle_init_transform
-            )
-        else:
-            self.vehicle.set_transform(vehicle_init_transform)
+
+        # spawn vehicle
+        self.vehicle = self.world.spawn_actor(vehicle_blueprint, vehicle_init_transform)
+
+        if from_fixed_point is True:
+            # set the car always at the same distance from the waypoint
+            self.vehicle.set_transform(self._fix_waypoint())
 
     def _reset_other_vehicles(self):
         if not self.traffic:
@@ -627,6 +665,9 @@ class CarlaEnv(gym.Env):
         info_dict["collision_reward"] = collision_reward
         info_dict["cost"] = cost
 
+        # clip reward between -1 and 0
+        total_reward = sigmoid(total_reward) - 1
+
         return total_reward, done, info_dict
 
     def _get_follow_waypoint_reward(self, location):
@@ -650,7 +691,7 @@ class CarlaEnv(gym.Env):
     def _on_collision(self, event):
         other_actor = get_actor_name(event.other_actor)
         self.collision = True
-        self._reset_vehicle()
+        self._reset_vehicle(from_fixed_point=True)
 
     def _on_lane_invasion(self, event):
         self.lane_invasion_event = event
