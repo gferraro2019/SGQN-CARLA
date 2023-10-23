@@ -67,7 +67,7 @@ class CarlaEnv(gym.Env):
         autopilot,
         unload_map_layer=None,
         max_episode_steps=1000,
-        lower_limit_cumulative_reward=-600,
+        lower_limit_return_=-600,
         visualize_target=False,
     ):
         """This function initialize the Carla enviroment.
@@ -85,7 +85,7 @@ class CarlaEnv(gym.Env):
             autopilot (boolean): whether or not to activate the autopilot for the ego vehicle.
             unload_map_layer (str optional): whether or not to remove some layer from the map. "All" leave everything as it is, "custom" use customized layers. Defaults to None.
             max_episode_steps (int, optional): the lenght of the episode in frames. Defaults to 1000.
-            lower_limit_cumulative_reward (int, optional): The lowest cumulative reward possible. Defaults to -600.
+            lower_limit_return_ (int, optional): The lowest cumulative reward possible. Defaults to -600.
             visualize_target (bool, optional): whether or not to show the waypoint in the environment. Defaults to False.
 
         Raises:
@@ -110,8 +110,8 @@ class CarlaEnv(gym.Env):
         self.visualize_target = visualize_target
 
         # to end the task when the lower limit is reached
-        self.lower_limit_cumulative_reward = lower_limit_cumulative_reward
-        self.cumulative_reward = 0
+        self.lower_limit_return_ = lower_limit_return_
+        self.return_ = 0
 
         # initialize renderingAttributeError: module 'tensorflow' has no attribute 'contrib'
         if self.render_display:
@@ -235,7 +235,7 @@ class CarlaEnv(gym.Env):
             sensor_blueprint, carla.Transform(), attach_to=self.vehicle
         )
         self.lane_invasion_sensor.listen(lambda event: self._on_lane_invasion(event))
-        self.lane_invasion_reward = 0
+        self.n_lane_invasions = 0
         self.lane_invasion_event = None
 
         #         # initialize autopilot
@@ -353,7 +353,7 @@ class CarlaEnv(gym.Env):
             obs, _, _, _ = self.step([0, 0])
         self.time_step = 0
 
-        self.cumulative_reward = 0
+        self.return_ = 0
         return obs
 
     def generate_waypoints(self):
@@ -549,10 +549,10 @@ class CarlaEnv(gym.Env):
             pygame.display.flip()
 
         # get reward and next observation
-        reward, done, info = self._get_reward()
+        reward, done, info = self._get_reward(steer)
 
         # update cumulative reward to interupt if the lower limit is reached
-        self.cumulative_reward += reward
+        self.return_ += reward
 
         if self.observations_type == "state":
             next_obs = self._get_state_obs()
@@ -567,9 +567,9 @@ class CarlaEnv(gym.Env):
         self.count += 1
         self.time_step += 1
 
-        if self.time_step >= self._max_episode_steps or float(
-            self.cumulative_reward
-        ) <= float(self.lower_limit_cumulative_reward):
+        if self.time_step >= self._max_episode_steps or float(self.return_) <= float(
+            self.lower_limit_return_
+        ):
             done = True
 
         return next_obs, reward, done, info
@@ -635,7 +635,7 @@ class CarlaEnv(gym.Env):
 
     #     return total_reward, done, info_dict
 
-    def _get_reward(self):
+    def _get_reward(self, steer):
         vehicle_location = self.vehicle.get_location()
 
         distance = np.sqrt(
@@ -643,30 +643,43 @@ class CarlaEnv(gym.Env):
             + (vehicle_location.y - self.waypoint.location.y) ** 2
         )
 
-        if distance <= 0.1:
+        if distance == 0:
             done, collision_reward = True, 0
             follow_waypoint_reward = 0
         else:
-            follow_waypoint_reward = -distance
+            follow_waypoint_reward = -1  # -distance
             done, collision_reward = False, 0
 
         cost = 0
-        if self.lane_invasion_reward != 0:
+        if self.n_lane_invasions != 0:
             total_reward = (
-                follow_waypoint_reward + collision_reward + self.lane_invasion_reward
+                follow_waypoint_reward + collision_reward + self.n_lane_invasions * -1
             )
-            self.lane_invasion_reward = 0
+            # self.n_lane_invasions = 0
+            if self.lane_invasion >= 3:
+                done = True
+                total_reward -= 1000
 
         else:
             total_reward = follow_waypoint_reward + collision_reward
+
+        vehicle_velocity = self.vehicle.get_velocity()
+        speed = np.linalg.norm(np.array([vehicle_velocity.x, vehicle_velocity.y]))
+
+        if speed >= 30:
+            total_reward -= 1
 
         info_dict = dict()
         info_dict["follow_waypoint_reward"] = follow_waypoint_reward
         info_dict["collision_reward"] = collision_reward
         info_dict["cost"] = cost
+        info_dict["distance"] = distance
 
         # clip reward between -1 and 0
-        total_reward = sigmoid(total_reward) - 1
+        # if total_reward != 0:
+        # total_reward = sigmoid(total_reward - abs(steer)) - 0.5
+
+        total_reward = (total_reward - abs(steer) * 2) / 1000
 
         return total_reward, done, info_dict
 
@@ -696,7 +709,7 @@ class CarlaEnv(gym.Env):
     def _on_lane_invasion(self, event):
         self.lane_invasion_event = event
         print(event.crossed_lane_markings)
-        self.lane_invasion_reward = len(event.crossed_lane_markings) * -100
+        self.n_lane_invasions = len(event.crossed_lane_markings) * -100
 
     def close(self):
         for actor in self.actor_list:
