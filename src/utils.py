@@ -678,7 +678,7 @@ class MainWindow_Tot_Reward(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout()
 
-        label1 = QLabel("Current Total Reward Episode:")
+        label1 = QLabel("Current Return Episode:")
         font = label1.font()
         font.setPointSize(20)
         label1.setFont(font)
