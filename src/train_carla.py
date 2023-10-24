@@ -50,9 +50,11 @@ def evaluate(
                         break
 
                 episode_reward += cum_reward
+                distance = np.linalg.norm(np.array(obs[1]))
 
                 # Plot and update reward graph
-                window_reward.update_plot_data(episode_step, episode_reward)
+                # window_reward.update_plot_data(episode_step, episode_reward)
+                window_reward.update_plot_data(episode_step, -distance)
                 app1.processEvents()
 
                 window_tot_reward.update_labels(env.episode, episode_reward, action)
@@ -124,7 +126,7 @@ def main(args):
         False,
         "Custom",  # "All",
         max_episode_steps,
-        lower_limit_cumulative_reward=args.lower_limit_cumulative_reward,
+        lower_limit_return_=args.lower_limit_return_,
         # visualize_target=True
     )
     env = FrameStack_carla(env, args.frame_stack)
@@ -148,7 +150,7 @@ def main(args):
                 False,
                 "Custom",  # "All",
                 max_episode_steps,
-                lower_limit_cumulative_reward=args.lower_limit_cumulative_reward,
+                lower_limit_return_=args.lower_limit_return_,
                 # visualize_target=True
             )
         else:
@@ -166,7 +168,7 @@ def main(args):
                 False,
                 None,
                 max_episode_steps,
-                lower_limit_cumulative_reward=args.lower_limit_cumulative_reward,
+                lower_limit_return_=args.lower_limit_return_,
             )
 
         # test_env = #videoWrapper(env, cond, 1)
@@ -197,12 +199,13 @@ def main(args):
     # Start training
     start_time = time.time()
     train_step = 0
-    for train_step in tqdm(range(0, args.train_steps + 1)):
+    for train_step in range(0, args.train_steps + 1):
         # while n_episode < args.n_episodes + 1:
         # EVALUATE:
         if done:
             # if train_step > 0:
             if n_episode > 0:
+                L.log("train/episode", n_episode, train_step - 1)
                 L.log("train/duration", time.time() - start_time, train_step - 1)
                 L.dump(train_step - 1)
 
@@ -225,7 +228,7 @@ def main(args):
             # Evaluate agent periodically
             if n_episode % args.eval_freq == 0 and n_episode > 0:
                 print("Evaluating:", work_dir)
-                L.log("eval/n_episode", n_episode, train_step - 1)
+                L.log("eval/episode", n_episode, train_step - 1)
                 # evaluate(env, agent, args.algorithm, args.eval_episodes, L, train_step)
                 test_env.env.episode = n_episode
                 if test_envs is not None:
@@ -246,7 +249,7 @@ def main(args):
                     evaluated_episodes.append(n_episode + i)
 
             L.log("train/episode_reward", episode_reward, train_step - 1)
-            L.log("train/n_episode", n_episode, train_step - 1)
+            L.log("train/episode", n_episode, train_step - 1)
 
             # Reset environment
             obs = env.reset()
@@ -267,12 +270,12 @@ def main(args):
         # Sample action for data collection
         if train_step < args.init_steps:
             action = env.action_space.sample()
+
         else:
             with utils.eval_mode(agent):
                 action = agent.sample_action(obs)
 
-        # Run training update
-        if train_step >= args.init_steps:
+            # Run training update
             num_updates = args.init_steps if train_step == args.init_steps else 1
             for i in range(num_updates):
                 agent.update(replay_buffer, L, train_step)
@@ -282,15 +285,20 @@ def main(args):
         for _ in range(args.action_repeat):
             next_obs, reward, done, _ = env.step(action)
             episode_step += 1
-            done_bool = 0 if episode_step + 1 == env._max_episode_steps else float(done)
+            done_bool = 0
+            if episode_step + 1 != env._max_episode_steps:
+                done_bool = float(done)
+
             cum_reward += reward
             if done:
                 break
 
         reward = cum_reward
+        distance = np.linalg.norm(np.array(next_obs[1]))
 
         # Plot and update reward graph
-        window_reward.update_plot_data(train_step, reward)
+        # window_reward.update_plot_data(train_step, reward)
+        window_reward.update_plot_data(train_step, -distance)
         app1.processEvents()
 
         window_tot_reward.update_labels(n_episode, episode_reward, action)
@@ -310,6 +318,7 @@ def main(args):
 
 if __name__ == "__main__":
     np.seterr("ignore")
+    np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
     args = parse_args()
 
     app1 = QtWidgets.QApplication(sys.argv)
@@ -332,26 +341,26 @@ if __name__ == "__main__":
             + 1
         )
 
-    try:
-        evaluated_episodes = main(args)
+    # try:
+    evaluated_episodes = main(args)
 
-        # create video from images
-        save_path = os.path.join("output", str(args.seed), "video_records", "avi")
-        images_path = os.path.join("output", str(args.seed), "video_records", "display")
+    # create video from images
+    save_path = os.path.join("output", str(args.seed), "video_records", "avi")
+    images_path = os.path.join("output", str(args.seed), "video_records", "display")
 
-        create_video_from_images(
-            evaluated_episodes,
-            args.algorithm,
-            args.episode_length,
-            images_path,
-            save_path,
-        )
+    create_video_from_images(
+        evaluated_episodes,
+        args.algorithm,
+        args.episode_length,
+        images_path,
+        save_path,
+    )
 
-    except Exception as e:
-        print(e)
-        from IPython import embed
+    # except Exception as e:
+    #     print(e)
+    #     from IPython import embed
 
-        embed()
+    #     embed()
 
-    finally:
-        sys.exit(app1.exec_())
+    # finally:
+    #     sys.exit(app1.exec_())
