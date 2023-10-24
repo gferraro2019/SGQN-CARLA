@@ -13,11 +13,9 @@ def parse_args():
     parser.add_argument("--action_repeat", default=5, type=int)
     parser.add_argument("--episode_length", default=1000, type=int)
     parser.add_argument("--eval_mode", default="color_easy", type=str)
-    parser.add_argument("--capacity", default=100_000, type=str)
+    parser.add_argument("--capacity", default=40_000, type=str)
     parser.add_argument("--n_episodes", default=2_000, type=int)
-    parser.add_argument(
-        "--lower_limit_cumulative_reward", default=-(1000 * 5), type=float
-    )
+    parser.add_argument("--lower_limit_return_", default=-3, type=float)
 
     # agent
     parser.add_argument("--algorithm", default="sac", type=str)
@@ -38,14 +36,14 @@ def parse_args():
     parser.add_argument("--hidden_dim", default=1024, type=int)
 
     # actor
-    parser.add_argument("--actor_lr", default=1e-3, type=float)
+    parser.add_argument("--actor_lr", default=1e-2, type=float)
     parser.add_argument("--actor_beta", default=0.9, type=float)
     parser.add_argument("--actor_log_std_min", default=-10, type=float)
     parser.add_argument("--actor_log_std_max", default=2, type=float)
     parser.add_argument("--actor_update_freq", default=2, type=int)
 
     # critic
-    parser.add_argument("--critic_lr", default=1e-3, type=float)
+    parser.add_argument("--critic_lr", default=1e-2, type=float)
     parser.add_argument("--critic_beta", default=0.9, type=float)
     parser.add_argument("--critic_tau", default=0.01, type=float)
     parser.add_argument("--critic_target_update_freq", default=2, type=int)
@@ -59,7 +57,7 @@ def parse_args():
     parser.add_argument("--encoder_tau", default=0.05, type=float)
 
     # entropy maximization
-    parser.add_argument("--init_temperature", default=0.3, type=float)
+    parser.add_argument("--init_temperature", default=0.2, type=float)
     parser.add_argument("--alpha_lr", default=1e-4, type=float)
     parser.add_argument("--alpha_beta", default=0.5, type=float)
 
@@ -82,8 +80,8 @@ def parse_args():
     parser.add_argument("--consistency", default=1, type=int)
 
     # eval
-    parser.add_argument("--save_freq", default="100", type=str)
-    parser.add_argument("--eval_freq", default="100", type=str)
+    parser.add_argument("--save_freq", default="50", type=str)
+    parser.add_argument("--eval_freq", default="50", type=str)
     parser.add_argument("--eval_episodes", default=3, type=int)
     parser.add_argument("--distracting_cs_intensity", default=0.0, type=float)
 
