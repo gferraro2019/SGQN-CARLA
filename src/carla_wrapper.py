@@ -109,6 +109,10 @@ class CarlaEnv(gym.Env):
 
         self.visualize_target = visualize_target
 
+        self.check_loop_buffer = np.zeros(100)  # track the distances to avoid loops
+        self.sinx = np.array([np.sin(x) for x in range(0, 100, 1)])
+        self.cosx = np.array([np.cos(x) for x in range(0, 100, 1)])
+
         # to end the task when the lower limit is reached
         self.lower_limit_return_ = lower_limit_return_
         self.return_ = 0
@@ -301,6 +305,7 @@ class CarlaEnv(gym.Env):
         return transform
 
     def reset(self):
+        self.check_loop_buffer = np.zeros(100)  # track the distances to avoid loops
         # to avoid influnces from the former episode (angular momentun preserved)
         if self.vehicle is not None:
             self.vehicle.destroy()
@@ -642,6 +647,15 @@ class CarlaEnv(gym.Env):
             (vehicle_location.x - self.waypoint.location.x) ** 2
             + (vehicle_location.y - self.waypoint.location.y) ** 2
         )
+        # check if is turning in loops
+        self.check_loop_buffer[-1] = distance
+        self.check_loop_buffer = np.roll(self.check_loop_buffer, -1)
+        corr1 = np.corrcoef(self.check_loop_buffer, self.sinx)[1, 0]
+        corr2 = np.corrcoef(self.check_loop_buffer, self.cosx)[1, 0]
+
+        if np.abs(corr1) >= 0.5 or np.abs(corr2) >= 0.5:
+            done = True
+            total_reward -= 1000
 
         if distance == 0:
             done, collision_reward = True, 0
