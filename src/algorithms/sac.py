@@ -129,7 +129,7 @@ class SAC(object):
             current_Q2, target_Q
         )
         if L is not None:
-            L.log("train_critic/loss", critic_loss, step)
+            L.log("train/critic_loss", critic_loss, step)
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
@@ -143,7 +143,7 @@ class SAC(object):
         actor_loss = (self.alpha.detach() * log_pi - actor_Q).mean()
 
         if L is not None:
-            L.log("train_actor/loss", actor_loss, step)
+            L.log("train/actor_loss", actor_loss, step)
             entropy = 0.5 * log_std.shape[1] * (1.0 + np.log(2 * np.pi)) + log_std.sum(
                 dim=-1
             )
@@ -157,8 +157,8 @@ class SAC(object):
             alpha_loss = (self.alpha * (-log_pi - self.target_entropy).detach()).mean()
 
             if L is not None:
-                L.log("train_alpha/loss", alpha_loss, step)
-                L.log("train_alpha/value", self.alpha, step)
+                L.log("train/alpha_loss", alpha_loss, step)
+                L.log("train/alpha_value", self.alpha, step)
 
             alpha_loss.backward()
             self.log_alpha_optimizer.step()
