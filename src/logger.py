@@ -1,6 +1,7 @@
-from collections import defaultdict
 import json
 import os
+from collections import defaultdict
+
 import torch
 from termcolor import colored
 
@@ -18,6 +19,7 @@ FORMAT_CONFIG = {
             ("contrastive_loss", "CONTRALOSS", "float"),
         ],
         "eval": [
+            ("episode", "E", "int"),
             ("step", "S", "int"),
             ("episode_reward", "ER", "float"),
             ("episode_reward_test_env_color_hard", "ERTESTCOLOR", "float"),
