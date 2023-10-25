@@ -57,7 +57,7 @@ def parse_args():
     parser.add_argument("--encoder_tau", default=0.05, type=float)
 
     # entropy maximization
-    parser.add_argument("--init_temperature", default=0.2, type=float)
+    parser.add_argument("--init_temperature", default=0.3, type=float)
     parser.add_argument("--alpha_lr", default=1e-4, type=float)
     parser.add_argument("--alpha_beta", default=0.5, type=float)
 

@@ -104,17 +104,17 @@ class Replay_Buffer_carla:
         self,
         capacity=10_000,
         batch_size=32,
-        state_shape=((9, 84, 84), (1, 2)),
+        state_shape=((9, 84, 84), (1, 9)),
         action_shape=(1, 2),
         reward_shape=(1, 1),
     ):
         # self.content = []
         self.states_img = torch.empty(0, dtype=torch.float32).to("cpu")
-        self.states_dist = torch.empty(0, dtype=torch.float32).to("cpu")
+        self.states = torch.empty(0, dtype=torch.float32).to("cpu")
         self.actions = torch.empty(0, dtype=torch.int32).to("cpu")
         self.rewards = torch.empty(0, dtype=torch.float32).to("cpu")
         self.next_states_img = torch.empty(0, dtype=torch.float32).to("cpu")
-        self.next_states_dist = torch.empty(0, dtype=torch.float32).to("cpu")
+        self.next_states = torch.empty(0, dtype=torch.float32).to("cpu")
         self.dones = torch.empty(0, dtype=torch.bool).to("cpu")
 
         self.capacity = capacity
@@ -154,9 +154,9 @@ class Replay_Buffer_carla:
                 ),
                 0,
             )
-            self.states_dist = torch.cat(
+            self.states = torch.cat(
                 (
-                    self.states_dist,
+                    self.states,
                     self.stack(observation[0].frames, 1),
                 ),
                 0,
@@ -183,8 +183,8 @@ class Replay_Buffer_carla:
                 (self.next_states_img, self.stack(observation[3].frames, 0)),
                 0,
             )
-            self.next_states_dist = torch.cat(
-                (self.next_states_dist, self.stack(observation[3].frames, 1)),
+            self.next_states = torch.cat(
+                (self.next_states, self.stack(observation[3].frames, 1)),
                 0,
             )
             self.dones = torch.cat(
@@ -200,7 +200,7 @@ class Replay_Buffer_carla:
         else:
             # self.content[self.idx] = observation
             self.states_img[self.idx] = self.stack(observation[0].frames, 0)
-            self.states_dist[self.idx] = self.stack(observation[0].frames, 1)
+            self.states[self.idx] = self.stack(observation[0].frames, 1)
             self.actions[self.idx] = torch.tensor(observation[1], dtype=torch.int32).to(
                 "cpu"
             )
@@ -208,7 +208,7 @@ class Replay_Buffer_carla:
                 observation[2], dtype=torch.float32
             ).to("cpu")
             self.next_states_img[self.idx] = self.stack(observation[3].frames, 0)
-            self.next_states_dist[self.idx] = self.stack(observation[3].frames, 1)
+            self.next_states[self.idx] = self.stack(observation[3].frames, 1)
             self.dones[self.idx] = torch.tensor(observation[4], dtype=torch.bool).to(
                 "cpu"
             )
@@ -231,12 +231,14 @@ class Replay_Buffer_carla:
             else:
                 idx = random.sample(range(len(self)), self.batch_size)
             return (
-                (self.states_img[idx].to(device), self.states_dist[idx].to(device)),
+                # self.states_img[idx].to(device),
+                (self.states_img[idx].to(device), self.states[idx].to(device)),
                 self.actions[idx].to(device),
                 self.rewards[idx].to(device),
+                # self.next_states_img[idx].to(device),
                 (
                     self.next_states_img[idx].to(device),
-                    self.next_states_dist[idx].to(device),
+                    self.next_states[idx].to(device),
                 ),
                 self.dones[idx].to(device),
             )

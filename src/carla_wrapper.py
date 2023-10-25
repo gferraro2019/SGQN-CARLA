@@ -40,8 +40,6 @@ try:
 except IndexError:
     pass
 
-# In[2]:
-
 
 from scipy.special import expit as sigmoid
 
@@ -249,12 +247,11 @@ class CarlaEnv(gym.Env):
 
         if self.observations_type == "sgqn_pixel":
             obs = np.zeros((3, 84, 84))
-            dx = 0.0
-            dy = 0.0
+            state = np.zeros(9, dtype=np.float32)
             self.observation_space = spaces.Tuple(
                 (
                     spaces.Box(0, 255, shape=obs.shape, dtype=np.uint8),
-                    spaces.Box(-np.inf, np.inf, shape=(2,)),
+                    spaces.Box(-np.inf, np.inf, shape=state.shape, dtype="float32"),
                 )
             )
         else:
@@ -332,7 +329,7 @@ class CarlaEnv(gym.Env):
                 v for v in veichles if v.get_attribute("number_of_wheels").as_int() == 2
             ]
             bike_blueprint = bikes_blueprints[0]
-            bike_blueprint.set_attribute("color", ",255,0")
+            bike_blueprint.set_attribute("color", "0,255,0")
             transform.location.y = self.waypoint.location.y
             transform.location.x = self.waypoint.location.x
             transform.location.z = 0
@@ -461,7 +458,7 @@ class CarlaEnv(gym.Env):
 
     def step(self, action):
         rewards = []
-        next_obs, done, info = np.array([]), False, {}
+        next_obs, done, info = None, False, {}
         for _ in range(self.frame_skip):
             if self.autopilot:
                 self.vehicle.set_autopilot(True)
@@ -566,7 +563,8 @@ class CarlaEnv(gym.Env):
             next_obs = self._get_pixel_obs(vision_image)
             next_obs = next_obs.reshape(3, 84, 84).astype(np.uint8)
             dx, dy = self._compute_distance_from_waypoint()
-            next_obs = (next_obs, (dx, dy))
+            state = self._get_state_obs()
+            next_obs = (next_obs, state)
 
         # increase frame counter
         self.count += 1
@@ -599,32 +597,74 @@ class CarlaEnv(gym.Env):
         return rgb
 
     def _get_state_obs(self):
+        """This funciton return a state of 9 elements:
+            dx_pos,
+            dy_pos,
+            dz_pos,
+            delta_pitch,
+            delta_yaw,
+            delta_roll,
+            acceleration,
+            angular_velocity,
+            velocity.
+
+        Returns:
+            np.array: the state
+        """
         transform = self.vehicle.get_transform()
         location = transform.location
         rotation = transform.rotation
-        x_pos = location.x
-        y_pos = location.y
-        z_pos = location.z
-        pitch = rotation.pitch
-        yaw = rotation.yaw
-        roll = rotation.roll
+        dx_pos = np.sqrt((location.x - self.waypoint.location.x) ** 2)
+        dy_pos = np.sqrt((location.y - self.waypoint.location.y) ** 2)
+        dz_pos = np.sqrt((location.z - self.waypoint.location.z) ** 2)
+        delta_pitch = self.waypoint.rotation.pitch - rotation.pitch
+        delta_yaw = self.waypoint.rotation.yaw - rotation.yaw
+        delta_roll = self.waypoint.rotation.roll - rotation.roll
         acceleration = vector_to_scalar(self.vehicle.get_acceleration())
         angular_velocity = vector_to_scalar(self.vehicle.get_angular_velocity())
         velocity = vector_to_scalar(self.vehicle.get_velocity())
         return np.array(
             [
-                x_pos,
-                y_pos,
-                z_pos,
-                pitch,
-                yaw,
-                roll,
+                dx_pos,
+                dy_pos,
+                dz_pos,
+                delta_pitch,
+                delta_yaw,
+                delta_roll,
                 acceleration,
                 angular_velocity,
                 velocity,
             ],
-            dtype=np.float64,
+            dtype=np.float32,
         )
+
+    # def _get_state_obs(self):
+    #     transform = self.vehicle.get_transform()
+    #     location = transform.location
+    #     rotation = transform.rotation
+    #     x_pos = location.x
+    #     y_pos = location.y
+    #     z_pos = location.z
+    #     pitch = rotation.pitch
+    #     yaw = rotation.yaw
+    #     roll = rotation.roll
+    #     acceleration = vector_to_scalar(self.vehicle.get_acceleration())
+    #     angular_velocity = vector_to_scalar(self.vehicle.get_angular_velocity())
+    #     velocity = vector_to_scalar(self.vehicle.get_velocity())
+    #     return np.array(
+    #         [
+    #             x_pos,
+    #             y_pos,
+    #             z_pos,
+    #             pitch,
+    #             yaw,
+    #             roll,
+    #             acceleration,
+    #             angular_velocity,
+    #             velocity,
+    #         ],
+    #         dtype=np.float64,
+    #     )
 
     # def _get_reward(self):
     #     vehicle_location = self.vehicle.get_location()
@@ -653,6 +693,7 @@ class CarlaEnv(gym.Env):
         corr1 = np.corrcoef(self.check_loop_buffer, self.sinx)[1, 0]
         corr2 = np.corrcoef(self.check_loop_buffer, self.cosx)[1, 0]
 
+        # avoid vehicle loops
         if np.abs(corr1) >= 0.5 or np.abs(corr2) >= 0.5:
             done = True
             total_reward -= 1000

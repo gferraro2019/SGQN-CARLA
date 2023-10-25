@@ -53,8 +53,12 @@ class SAC(object):
             args.actor_log_std_max,
         ).cuda()
 
-        self.critic = m.CriticStateDistance(
-            critic_encoder, action_shape, args.hidden_dim
+        self.critic = m.CriticState(
+            critic_encoder,
+            action_shape,
+            args.hidden_dim,
+            state_dim=int(obs_shape[1][0] / 3)
+            * obs_shape[0][0],  # /3 because RGB channels
         ).cuda()
         self.critic_target = deepcopy(self.critic)
 

@@ -280,12 +280,12 @@ class FrameStack_carla(gym.Wrapper):
 
         self._k = k
         self._frames = deque([], maxlen=k)
-        shp = env.observation_space[0].shape
-
+        shp1 = env.observation_space[0].shape
+        shp2 = env.observation_space[1].shape
         self.observation_space = spaces.Tuple(
             (
-                spaces.Box(0, 255, shape=((shp[0] * k,) + shp[1:]), dtype=np.uint8),
-                spaces.Box(-np.inf, np.inf, shape=(2,)),
+                spaces.Box(0, 255, shape=((shp1[0] * k,) + shp1[1:]), dtype=np.uint8),
+                spaces.Box(-np.inf, np.inf, shape=shp2),
             )
         )
 
@@ -319,14 +319,14 @@ from PIL import Image
 class VideoRecord_carla(gym.Wrapper):
     """Stack frames as observation"""
 
-    def __init__(self, env, name_algorithm,folder=None, n_episodes=100):
+    def __init__(self, env, name_algorithm, folder=None, n_episodes=100):
         gym.Wrapper.__init__(self, env)
         self.env = env
         self.count_frame = 0
         self.episode = -1
         self.paths = [
-            op.join("output",str(folder), "video_records", "camera"),
-            op.join("output",str(folder), "video_records", "display"),
+            op.join("output", str(folder), "video_records", "camera"),
+            op.join("output", str(folder), "video_records", "display"),
         ]
         self.name_algorithm = name_algorithm
         for path in self.paths:

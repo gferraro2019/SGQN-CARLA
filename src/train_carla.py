@@ -50,7 +50,7 @@ def evaluate(
                         break
 
                 episode_reward += cum_reward
-                distance = np.linalg.norm(np.array(obs[1]))
+                distance = np.linalg.norm(np.array(obs[1][0:2]))
 
                 # Plot and update reward graph
                 # window_reward.update_plot_data(episode_step, episode_reward)
@@ -187,7 +187,7 @@ def main(args):
     print("Observations:", env.observation_space.shape)
 
     shp = (env.observation_space[0].shape, env.observation_space[1].shape)
-    print("Observations.shapenano:", shp)
+    print("Observations.shape:", shp)
 
     # Create the agent
     agent = make_agent(obs_shape=shp, action_shape=env.action_space.shape, args=args)
@@ -195,6 +195,8 @@ def main(args):
     # Initialize variables
     n_episode, episode_reward, done = 0, 0, True
     evaluated_episodes = []
+
+    # initialize replay buffer
 
     # Start training
     start_time = time.time()
@@ -294,7 +296,7 @@ def main(args):
                 break
 
         reward = cum_reward
-        distance = np.linalg.norm(np.array(next_obs[1]))
+        distance = np.linalg.norm(np.array(next_obs[1][:2]))
 
         # Plot and update reward graph
         # window_reward.update_plot_data(train_step, reward)

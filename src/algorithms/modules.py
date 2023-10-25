@@ -262,23 +262,21 @@ class Critic(nn.Module):
         return self.Q1(x, action), self.Q2(x, action)
 
 
-class CriticStateDistance(nn.Module):
-    def __init__(
-        self, encoder, action_shape, hidden_dim, state_distance_dim: int = 6
-    ) -> None:
+class CriticState(nn.Module):
+    def __init__(self, encoder, action_shape, hidden_dim, state_dim: int = 6) -> None:
         super().__init__()
         self.encoder = encoder
         self.Q1 = QFunction(
-            self.encoder.out_dim, action_shape[0] + state_distance_dim, hidden_dim
+            self.encoder.out_dim, action_shape[0] + state_dim, hidden_dim
         )
         self.Q2 = QFunction(
-            self.encoder.out_dim, action_shape[0] + state_distance_dim, hidden_dim
+            self.encoder.out_dim, action_shape[0] + state_dim, hidden_dim
         )
 
-    def forward(self, x, action, distance, detach=False):
-        action_and_distance = torch.cat([action, distance], dim=1)
+    def forward(self, x, action, state, detach=False):
+        action_and_state = torch.cat([action, state], dim=1)
         x = self.encoder(x, detach)
-        return self.Q1(x, action_and_distance), self.Q2(x, action_and_distance)
+        return self.Q1(x, action_and_state), self.Q2(x, action_and_state)
 
 
 class CURLHead(nn.Module):
