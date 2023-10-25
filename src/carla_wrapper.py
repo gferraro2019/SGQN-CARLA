@@ -108,8 +108,8 @@ class CarlaEnv(gym.Env):
         self.visualize_target = visualize_target
 
         self.check_loop_buffer = np.zeros(100)  # track the distances to avoid loops
-        self.sinx = np.array([np.sin(x) for x in range(0, 100, 1)])
-        self.cosx = np.array([np.cos(x) for x in range(0, 100, 1)])
+        self.sinx = np.array([np.sin(0.125 * x) for x in range(0, 100, 1)])
+        self.cosx = np.array([np.cos(0.125 * x) for x in range(0, 100, 1)])
 
         # to end the task when the lower limit is reached
         self.lower_limit_return_ = lower_limit_return_
@@ -681,6 +681,7 @@ class CarlaEnv(gym.Env):
     #     return total_reward, done, info_dict
 
     def _get_reward(self, steer):
+        done, total_reward = False, 0
         vehicle_location = self.vehicle.get_location()
 
         distance = np.sqrt(
@@ -694,16 +695,16 @@ class CarlaEnv(gym.Env):
         corr2 = np.corrcoef(self.check_loop_buffer, self.cosx)[1, 0]
 
         # avoid vehicle loops
-        if np.abs(corr1) >= 0.5 or np.abs(corr2) >= 0.5:
-            done = True
+        if np.abs(corr1) >= 0.9 or np.abs(corr2) >= 0.9:
+            # done = True
             total_reward -= 1000
 
         if distance == 0:
-            done, collision_reward = True, 0
+            done, collision_reward = done or True, 0
             follow_waypoint_reward = 0
         else:
             follow_waypoint_reward = -1  # -distance
-            done, collision_reward = False, 0
+            done, collision_reward = done or False, 0
 
         cost = 0
         if self.n_lane_invasions != 0:
@@ -712,7 +713,7 @@ class CarlaEnv(gym.Env):
             )
             # self.n_lane_invasions = 0
             if self.lane_invasion >= 3:
-                done = True
+                done = done or True
                 total_reward -= 1000
 
         else:

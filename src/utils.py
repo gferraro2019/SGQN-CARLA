@@ -107,15 +107,17 @@ class Replay_Buffer_carla:
         state_shape=((9, 84, 84), (1, 9)),
         action_shape=(1, 2),
         reward_shape=(1, 1),
+        device="cpu",
     ):
+        self.device = device
         # self.content = []
-        self.states_img = torch.empty(0, dtype=torch.float32).to("cpu")
-        self.states = torch.empty(0, dtype=torch.float32).to("cpu")
-        self.actions = torch.empty(0, dtype=torch.int32).to("cpu")
-        self.rewards = torch.empty(0, dtype=torch.float32).to("cpu")
-        self.next_states_img = torch.empty(0, dtype=torch.float32).to("cpu")
-        self.next_states = torch.empty(0, dtype=torch.float32).to("cpu")
-        self.dones = torch.empty(0, dtype=torch.bool).to("cpu")
+        self.states_img = torch.empty(0, dtype=torch.float32).to(self.device)
+        self.states = torch.empty(0, dtype=torch.float32).to(self.device)
+        self.actions = torch.empty(0, dtype=torch.int32).to(self.device)
+        self.rewards = torch.empty(0, dtype=torch.float32).to(self.device)
+        self.next_states_img = torch.empty(0, dtype=torch.float32).to(self.device)
+        self.next_states = torch.empty(0, dtype=torch.float32).to(self.device)
+        self.dones = torch.empty(0, dtype=torch.bool).to(self.device)
 
         self.capacity = capacity
         self.idx = 0
@@ -135,13 +137,13 @@ class Replay_Buffer_carla:
         """
         t = torch.cat(
             [
-                torch.tensor(observation[0][side], dtype=torch.float32).to("cpu"),
-                torch.tensor(observation[1][side], dtype=torch.float32).to("cpu"),
-                torch.tensor(observation[2][side], dtype=torch.float32).to("cpu"),
+                torch.tensor(observation[0][side], dtype=torch.float32).to(self.device),
+                torch.tensor(observation[1][side], dtype=torch.float32).to(self.device),
+                torch.tensor(observation[2][side], dtype=torch.float32).to(self.device),
             ]
         )
 
-        return t.unsqueeze(0).to("cpu")
+        return t.unsqueeze(0).to(self.device)
 
     def add(self, observation):
         if len(self) < self.capacity:
@@ -166,7 +168,7 @@ class Replay_Buffer_carla:
                     self.actions,
                     torch.tensor(observation[1], dtype=torch.float32)
                     .unsqueeze(0)
-                    .to("cpu"),
+                    .to(self.device),
                 ),
                 0,
             )
@@ -175,7 +177,7 @@ class Replay_Buffer_carla:
                     self.rewards,
                     torch.tensor(observation[2], dtype=torch.float32)
                     .unsqueeze(0)
-                    .to("cpu"),
+                    .to(self.device),
                 ),
                 0,
             )
@@ -192,7 +194,7 @@ class Replay_Buffer_carla:
                     self.dones,
                     torch.tensor(observation[4], dtype=torch.bool)
                     .unsqueeze(0)
-                    .to("cpu"),
+                    .to(self.device),
                 ),
                 0,
             )
@@ -202,15 +204,15 @@ class Replay_Buffer_carla:
             self.states_img[self.idx] = self.stack(observation[0].frames, 0)
             self.states[self.idx] = self.stack(observation[0].frames, 1)
             self.actions[self.idx] = torch.tensor(observation[1], dtype=torch.int32).to(
-                "cpu"
+                self.device
             )
             self.rewards[self.idx] = torch.tensor(
                 observation[2], dtype=torch.float32
-            ).to("cpu")
+            ).to(self.device)
             self.next_states_img[self.idx] = self.stack(observation[3].frames, 0)
             self.next_states[self.idx] = self.stack(observation[3].frames, 1)
             self.dones[self.idx] = torch.tensor(observation[4], dtype=torch.bool).to(
-                "cpu"
+                self.device
             )
 
         self.idx = (self.idx + 1) % self.capacity
@@ -223,7 +225,7 @@ class Replay_Buffer_carla:
         # print(f"{len(self)} collected")
         return res
 
-    def sample(self, sample_capacity=None):
+    def sample(self, sample_capacity=None, device="cuda"):
         if self.can_sample():
             if sample_capacity:
                 idx = random.sample(range(len(self)), sample_capacity)

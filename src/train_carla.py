@@ -180,8 +180,7 @@ def main(args):
 
     # Create replay buffer
     replay_buffer = utils.Replay_Buffer_carla(
-        capacity=args.capacity,
-        batch_size=args.batch_size,
+        capacity=args.capacity, batch_size=args.batch_size
     )
 
     print("Observations:", env.observation_space.shape)
@@ -319,6 +318,7 @@ def main(args):
 
 
 if __name__ == "__main__":
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "caching_allocator"
     np.seterr("ignore")
     np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
     args = parse_args()
