@@ -41,6 +41,7 @@ def evaluate(
                     action = agent.select_action(obs)
 
                 cum_reward = 0
+                # repeat action k times
                 for _ in range(args.action_repeat):
                     obs, reward, done, _ = env.step(action)
                     episode_step += 1
@@ -79,6 +80,8 @@ def evaluate(
         if L is not None:
             _test_env = f"_test_env_{eval_mode}" if test_env else ""
             L.log(f"eval/episode_reward{_test_env}", episode_reward, step)
+            L.log(f"eval/episode", n_episode, step)
+            L.dump(step)
         episode_rewards.append(episode_reward)
 
 
@@ -180,7 +183,7 @@ def main(args):
 
     # Create replay buffer
     replay_buffer = utils.Replay_Buffer_carla(
-        capacity=args.capacity, batch_size=args.batch_size
+        capacity=args.capacity, batch_size=args.batch_size, device="cuda"
     )
 
     print("Observations:", env.observation_space.shape)

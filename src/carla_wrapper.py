@@ -562,7 +562,6 @@ class CarlaEnv(gym.Env):
             # for sgqn_carla add distances to the state
             next_obs = self._get_pixel_obs(vision_image)
             next_obs = next_obs.reshape(3, 84, 84).astype(np.uint8)
-            dx, dy = self._compute_distance_from_waypoint()
             state = self._get_state_obs()
             next_obs = (next_obs, state)
 

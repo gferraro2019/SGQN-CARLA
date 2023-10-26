@@ -13,7 +13,7 @@ def parse_args():
     parser.add_argument("--action_repeat", default=5, type=int)
     parser.add_argument("--episode_length", default=1000, type=int)
     parser.add_argument("--eval_mode", default="color_easy", type=str)
-    parser.add_argument("--capacity", default=40_000, type=str)
+    parser.add_argument("--capacity", default=20_000, type=str)
     parser.add_argument("--n_episodes", default=2_000, type=int)
     parser.add_argument("--lower_limit_return_", default=-3, type=float)
 
