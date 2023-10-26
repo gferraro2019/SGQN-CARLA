@@ -180,7 +180,7 @@ def main(args):
 
     # Create replay buffer
     replay_buffer = utils.Replay_Buffer_carla(
-        capacity=args.capacity, batch_size=args.batch_size
+        capacity=args.capacity, batch_size=args.batch_size, device="cuda"
     )
 
     print("Observations:", env.observation_space.shape)

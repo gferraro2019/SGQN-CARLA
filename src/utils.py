@@ -150,67 +150,95 @@ class Replay_Buffer_carla:
             # self.content.append(observation)
 
             self.states_img = torch.cat(
-                (
+                [
                     self.states_img,
-                    self.stack(observation[0].frames, 0),
-                ),
+                    torch.tensor(observation[0].frames[2][0], dtype=torch.float32)
+                    .unsqueeze(0)
+                    .to(self.device),
+                ],
                 0,
             )
             self.states = torch.cat(
-                (
+                [
                     self.states,
-                    self.stack(observation[0].frames, 1),
-                ),
+                    torch.tensor(observation[0].frames[2][1], dtype=torch.float32)
+                    .unsqueeze(0)
+                    .to(self.device),
+                ],
                 0,
             )
             self.actions = torch.cat(
-                (
+                [
                     self.actions,
                     torch.tensor(observation[1], dtype=torch.float32)
                     .unsqueeze(0)
                     .to(self.device),
-                ),
+                ],
                 0,
             )
             self.rewards = torch.cat(
-                (
+                [
                     self.rewards,
                     torch.tensor(observation[2], dtype=torch.float32)
                     .unsqueeze(0)
                     .to(self.device),
-                ),
+                ],
                 0,
             )
             self.next_states_img = torch.cat(
-                (self.next_states_img, self.stack(observation[3].frames, 0)),
+                [
+                    self.next_states_img,
+                    torch.tensor(observation[3].frames[2][0], dtype=torch.float32)
+                    .unsqueeze(0)
+                    .to(self.device),
+                ],
                 0,
             )
             self.next_states = torch.cat(
-                (self.next_states, self.stack(observation[3].frames, 1)),
+                [
+                    self.next_states,
+                    torch.tensor(observation[3].frames[2][1], dtype=torch.float32)
+                    .unsqueeze(0)
+                    .to(self.device),
+                ],
                 0,
             )
             self.dones = torch.cat(
-                (
+                [
                     self.dones,
                     torch.tensor(observation[4], dtype=torch.bool)
                     .unsqueeze(0)
                     .to(self.device),
-                ),
+                ],
                 0,
             )
 
         else:
             # self.content[self.idx] = observation
-            self.states_img[self.idx] = self.stack(observation[0].frames, 0)
-            self.states[self.idx] = self.stack(observation[0].frames, 1)
+            self.states_img[self.idx] = torch.tensor(
+                observation[0].frame[2][0], dtype=torch.float32
+            ).to(self.device)
+
+            self.states[self.idx] = torch.tensor(
+                observation[0].frame[2][1], dtype=torch.float32
+            ).to(self.device)
+
             self.actions[self.idx] = torch.tensor(observation[1], dtype=torch.int32).to(
                 self.device
             )
+
             self.rewards[self.idx] = torch.tensor(
                 observation[2], dtype=torch.float32
             ).to(self.device)
-            self.next_states_img[self.idx] = self.stack(observation[3].frames, 0)
-            self.next_states[self.idx] = self.stack(observation[3].frames, 1)
+
+            self.next_states_img[self.idx] = torch.tensor(
+                observation[3].frames[2][0], dtype=torch.float32
+            ).to(self.device)
+
+            self.next_states[self.idx] = torch.tensor(
+                observation[3].frames[2][1], dtype=torch.float32
+            ).to(self.device)
+
             self.dones[self.idx] = torch.tensor(observation[4], dtype=torch.bool).to(
                 self.device
             )
@@ -232,15 +260,46 @@ class Replay_Buffer_carla:
 
             else:
                 idx = random.sample(range(len(self)), self.batch_size)
+            idx = np.array(idx)
             return (
-                # self.states_img[idx].to(device),
-                (self.states_img[idx].to(device), self.states[idx].to(device)),
+                (
+                    torch.cat(
+                        [
+                            self.states_img[idx - 2].to(device),
+                            self.states_img[idx - 1].to(device),
+                            self.states_img[idx].to(device),
+                        ],
+                        1,
+                    ),
+                    torch.cat(
+                        [
+                            self.states[idx - 2].to(device),
+                            self.states[idx - 1].to(device),
+                            self.states[idx].to(device),
+                        ],
+                        1,
+                    ),
+                ),
                 self.actions[idx].to(device),
                 self.rewards[idx].to(device),
                 # self.next_states_img[idx].to(device),
                 (
-                    self.next_states_img[idx].to(device),
-                    self.next_states[idx].to(device),
+                    torch.cat(
+                        [
+                            self.next_states_img[idx - 2].to(device),
+                            self.next_states_img[idx - 1].to(device),
+                            self.next_states_img[idx].to(device),
+                        ],
+                        1,
+                    ),
+                    torch.cat(
+                        [
+                            self.next_states[idx - 2].to(device),
+                            self.next_states[idx - 1].to(device),
+                            self.next_states[idx].to(device),
+                        ],
+                        1,
+                    ),
                 ),
                 self.dones[idx].to(device),
             )
@@ -280,7 +339,7 @@ class Replay_Buffer_carla:
             return True, msg
 
     def __len__(self):
-        return self.states_img.shape[0]
+        return self.dones.shape[0]
 
 
 class RLDataset(IterableDataset):
