@@ -107,9 +107,27 @@ class CarlaEnv(gym.Env):
 
         self.visualize_target = visualize_target
 
-        self.check_loop_buffer = np.zeros(100)  # track the distances to avoid loops
-        self.sinx = np.array([np.sin(0.125 * x) for x in range(0, 100, 1)])
-        self.cosx = np.array([np.cos(0.125 * x) for x in range(0, 100, 1)])
+        self.check_loop_buffer = np.zeros(
+            int(self._max_episode_steps / 4)
+        )  # track the distances to avoid loops
+        self.sinx = [
+            np.array(
+                [
+                    np.sin(x / alpha)
+                    for x in range(0, int(self._max_episode_steps / 4), 1)
+                ]
+            )
+            for alpha in range(4, 14)
+        ]
+        self.cosx = [
+            np.array(
+                [
+                    np.cos(x / alpha)
+                    for x in range(0, int(self._max_episode_steps / 4), 1)
+                ]
+            )
+            for alpha in range(4, 14)
+        ]
 
         # to end the task when the lower limit is reached
         self.lower_limit_return_ = lower_limit_return_
@@ -268,10 +286,15 @@ class CarlaEnv(gym.Env):
             )
 
         # gym environment specific variables
-        self.action_space = spaces.Box(-1.0, 1.0, shape=(2,), dtype="float32")
-
+        self.action_space = spaces.Tuple(
+            (
+                spaces.Box(0, 1.0, shape=(1,), dtype="float32"),
+                spaces.Box(-1.0, 1.0, shape=(1,), dtype="float32"),
+            )
+        )
         # Fix a Waypoint
         self.waypoint = None
+        self.max_distance_from_waypoint = 0
         # self._fix_waypoint()
 
         self.bike = None
@@ -299,10 +322,15 @@ class CarlaEnv(gym.Env):
         transform.rotation.yaw = 270
         transform.rotation.roll = 0
 
+        self.max_distance_from_waypoint = abs(
+            self.waypoint.location.y - transform.location.y
+        )
         return transform
 
     def reset(self):
-        self.check_loop_buffer = np.zeros(100)  # track the distances to avoid loops
+        self.check_loop_buffer = np.zeros(
+            int(self._max_episode_steps / 4)
+        )  # track the distances to avoid loops
         # to avoid influnces from the former episode (angular momentun preserved)
         if self.vehicle is not None:
             self.vehicle.destroy()
@@ -613,9 +641,9 @@ class CarlaEnv(gym.Env):
         transform = self.vehicle.get_transform()
         location = transform.location
         rotation = transform.rotation
-        dx_pos = np.sqrt((location.x - self.waypoint.location.x) ** 2)
-        dy_pos = np.sqrt((location.y - self.waypoint.location.y) ** 2)
-        dz_pos = np.sqrt((location.z - self.waypoint.location.z) ** 2)
+        dx_pos = np.abs(location.x - self.waypoint.location.x)
+        dy_pos = np.abs(location.y - self.waypoint.location.y)
+        dz_pos = np.abs(location.z - self.waypoint.location.z)
         delta_pitch = self.waypoint.rotation.pitch - rotation.pitch
         delta_yaw = self.waypoint.rotation.yaw - rotation.yaw
         delta_roll = self.waypoint.rotation.roll - rotation.roll
@@ -624,15 +652,15 @@ class CarlaEnv(gym.Env):
         velocity = vector_to_scalar(self.vehicle.get_velocity())
         return np.array(
             [
-                dx_pos,
-                dy_pos,
-                dz_pos,
-                delta_pitch,
-                delta_yaw,
-                delta_roll,
-                acceleration,
-                angular_velocity,
-                velocity,
+                round(dx_pos, 3),
+                round(dy_pos, 3),
+                round(dz_pos, 3),
+                round(delta_pitch / 360, 3),
+                round(delta_yaw / 360, 3),
+                round(delta_roll / 360, 3),
+                round(acceleration, 3),
+                round(angular_velocity, 3),
+                round(velocity, 3),
             ],
             dtype=np.float32,
         )
@@ -680,7 +708,9 @@ class CarlaEnv(gym.Env):
     #     return total_reward, done, info_dict
 
     def _get_reward(self, steer):
-        done, total_reward = False, 0
+        info_dict = dict()
+        info_dict["looped"] = False
+        goal, done, total_reward = False, False, 0
         vehicle_location = self.vehicle.get_location()
 
         distance = np.sqrt(
@@ -690,20 +720,30 @@ class CarlaEnv(gym.Env):
         # check if is turning in loops
         self.check_loop_buffer[-1] = distance
         self.check_loop_buffer = np.roll(self.check_loop_buffer, -1)
-        corr1 = np.corrcoef(self.check_loop_buffer, self.sinx)[1, 0]
-        corr2 = np.corrcoef(self.check_loop_buffer, self.cosx)[1, 0]
+        corr1 = max(
+            [abs(np.corrcoef(self.check_loop_buffer, sinx)[1, 0]) for sinx in self.sinx]
+        )
+        # corr2 = max(
+        #     [abs(np.corrcoef(self.check_loop_buffer, cosx)[1, 0]) for cosx in self.cosx]
+        # )
 
         # avoid vehicle loops
-        if np.abs(corr1) >= 0.9 or np.abs(corr2) >= 0.9:
+        threshold = 0.6
+        if corr1 >= threshold:  # or corr2 >= threshold:
             # done = True
-            total_reward -= 1000
+            total_reward -= 100  # self._max_episode_steps
+            info_dict["looped"] = True
 
-        if distance == 0:
-            done, collision_reward = done or True, 0
+        if distance <= 0.6:
+            done, collision_reward = True, 0
             follow_waypoint_reward = 0
-        else:
+            goal = True
+        elif distance > 0.6 and distance <= self.max_distance_from_waypoint:
             follow_waypoint_reward = -1  # -distance
-            done, collision_reward = done or False, 0
+            done, collision_reward = False, 0
+        elif distance > self.max_distance_from_waypoint:
+            follow_waypoint_reward = -100  # -distance
+            done, collision_reward = False, 0
 
         cost = 0
         if self.n_lane_invasions != 0:
@@ -712,31 +752,37 @@ class CarlaEnv(gym.Env):
             )
             # self.n_lane_invasions = 0
             if self.lane_invasion >= 3:
-                done = done or True
-                total_reward -= 1000
+                done = True
+                total_reward -= 100  # self._max_episode_steps
 
         else:
             total_reward = follow_waypoint_reward + collision_reward
 
         vehicle_velocity = self.vehicle.get_velocity()
-        speed = np.linalg.norm(np.array([vehicle_velocity.x, vehicle_velocity.y]))
+        speed = round(
+            3.6 * np.linalg.norm(np.array([vehicle_velocity.x, vehicle_velocity.y])), 3
+        )
 
         if speed >= 30:
-            total_reward -= 1
+            total_reward -= 100
+        if speed == 0 and distance > 0:
+            total_reward = -100
 
-        info_dict = dict()
         info_dict["follow_waypoint_reward"] = follow_waypoint_reward
         info_dict["collision_reward"] = collision_reward
         info_dict["cost"] = cost
         info_dict["distance"] = distance
+        info_dict["goal"] = goal
 
         # clip reward between -1 and 0
         # if total_reward != 0:
         # total_reward = sigmoid(total_reward - abs(steer)) - 0.5
+        if goal is False:
+            total_reward = total_reward - abs(steer) * 4  # / self._max_episode_steps
+        else:
+            total_reward = 0
 
-        total_reward = (total_reward - abs(steer) * 2) / 1000
-
-        return total_reward, done, info_dict
+        return total_reward / 100, done, info_dict
 
     def _get_follow_waypoint_reward(self, location):
         nearest_wp = self.map.get_waypoint(location, project_to_road=True)

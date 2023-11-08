@@ -1,4 +1,5 @@
 import os
+import os.path as op
 import sys
 import time
 
@@ -7,6 +8,7 @@ import torch
 from PyQt5 import QtCore, QtWidgets
 from tqdm import tqdm
 
+import simple_sac
 import utils
 from algorithms.factory import make_agent
 from arguments import parse_args
@@ -22,10 +24,17 @@ from utils import (
 
 
 def evaluate(
-    env, agent, algorithm, n_episodes, L, step, test_env=False, eval_mode=None
+    env,
+    agent,
+    algorithm,
+    n_episodes,
+    L,
+    step,
+    test_env=False,
+    eval_mode=None,
 ):
     episode_rewards = []
-
+    distance = None
     for n_episode in range(n_episodes):
         obs = env.reset()
         window_tot_reward.reset_tot_reward()
@@ -37,21 +46,26 @@ def evaluate(
         torch_action = []
         while not done:
             with torch.no_grad():
-                with utils.eval_mode(agent):
-                    action = agent.select_action(obs)
+                # with utils.eval_mode(agent):
+                #     action = agent.select_action(obs)
+                #         else:
+                # with utils.eval_mode(agent):
+                # action = agent.sample_action(obs)
+                agent.set_eval_mode()
+                action = agent.select_action(obs)
 
                 cum_reward = 0
                 # repeat action k times
                 for _ in range(args.action_repeat):
-                    obs, reward, done, _ = env.step(action)
+                    obs, reward, done, info = env.step(action)
                     episode_step += 1
                     cum_reward += reward
+                    distance = info["distance"]
 
                     if done:
                         break
 
                 episode_reward += cum_reward
-                distance = np.linalg.norm(np.array(obs[1][0:2]))
 
                 # Plot and update reward graph
                 # window_reward.update_plot_data(episode_step, episode_reward)
@@ -78,16 +92,20 @@ def evaluate(
                         )
 
         if L is not None:
-            _test_env = f"_test_env_{eval_mode}" if test_env else ""
-            L.log(f"eval/episode_reward{_test_env}", episode_reward, step)
+            # _test_env = f"_test_env_{eval_mode}" if test_env else ""
             L.log(f"eval/episode", n_episode, step)
+            L.log(f"eval/episode_reward", episode_reward, step)
+            L.log("eval/distance", distance, step)
             L.dump(step)
         episode_rewards.append(episode_reward)
 
 
-def main(args):
+def main(
+    args,
+    load_model=None,
+):
     # Set seed
-    utils.set_seed_everywhere(args.seed)
+    # utils.set_seed_everywhere(args.seed)
 
     # Create working directory
     work_dir = os.path.join(
@@ -107,11 +125,12 @@ def main(args):
     # Define logger
     L = Logger(work_dir)
 
-    frame_skip = 1
-    max_episode_steps = (args.episode_length + frame_skip - 1) // frame_skip
-
+    # load datasent to to blend actual image from camera with a radom one from the database
     load_dataset_for_carla()
 
+    # set parameters from carla env
+    frame_skip = 1
+    max_episode_steps = (args.episode_length + frame_skip - 1) // frame_skip
     car = "citroen.c3"
     car_color = "255, 0, 0"
 
@@ -132,6 +151,8 @@ def main(args):
         lower_limit_return_=args.lower_limit_return_,
         # visualize_target=True
     )
+
+    # wrap env
     env = FrameStack_carla(env, args.frame_stack)
 
     # Create test environments
@@ -174,7 +195,7 @@ def main(args):
                 lower_limit_return_=args.lower_limit_return_,
             )
 
-        # test_env = #videoWrapper(env, cond, 1)
+        # wrap test envs
         test_env = VideoRecord_carla(test_env, args.algorithm, args.seed)
         test_env = FrameStack_carla(test_env, args.frame_stack)
 
@@ -192,13 +213,27 @@ def main(args):
     print("Observations.shape:", shp)
 
     # Create the agent
-    agent = make_agent(obs_shape=shp, action_shape=env.action_space.shape, args=args)
+    # agent = make_agent(obs_shape=shp, action_shape=env.action_space.shape, args=args)
+    agent = simple_sac.SACAgent(state_dim=shp, action_dim=2)
+
+    # load existing model to keep training it
+    if load_model is not None:
+        path, episode = load_model
+        actor_state_dict = torch.load(
+            op.join(path, "model", f"actor_{str(episode)}.pt")
+        )
+        critic_state_dict = torch.load(
+            op.join(path, "model", f"critic_{str(episode)}.pt")
+        )
+
+        agent.actor.load_state_dict(actor_state_dict)
+        agent.critic.load_state_dict(critic_state_dict)
+        print(f"Loaded actor and critic from episode {episode}")
 
     # Initialize variables
     n_episode, episode_reward, done = 0, 0, True
     evaluated_episodes = []
-
-    # initialize replay buffer
+    distance = 5
 
     # Start training
     start_time = time.time()
@@ -211,6 +246,7 @@ def main(args):
             if n_episode > 0:
                 L.log("train/episode", n_episode, train_step - 1)
                 L.log("train/duration", time.time() - start_time, train_step - 1)
+                L.log("train/distance", distance, train_step - 1)
                 L.dump(train_step - 1)
 
                 # Save agent periodically
@@ -220,7 +256,8 @@ def main(args):
                         os.path.join(model_dir, f"actor_{n_episode}.pt"),
                     )
                     torch.save(
-                        agent.critic.state_dict(),
+                        # agent.critic.state_dict(),
+                        agent.critic1.state_dict(),
                         os.path.join(model_dir, f"critic_{n_episode}.pt"),
                     )
                     if args.algorithm == "sgsac":
@@ -249,6 +286,7 @@ def main(args):
                         )
                 L.dump(train_step - 1)
 
+                # update list evaluated episode  in order to crete the video after the training
                 for i in range(args.eval_episodes):
                     evaluated_episodes.append(n_episode + i)
 
@@ -257,7 +295,6 @@ def main(args):
 
             # Reset environment
             obs = env.reset()
-            # test_env.reset()
             done = False
             episode_reward = 0
             episode_step = 0
@@ -274,45 +311,57 @@ def main(args):
         # Sample action for data collection
         if train_step < args.init_steps:
             action = env.action_space.sample()
-
+            action = np.concatenate((action[0], action[1]))
         else:
-            with utils.eval_mode(agent):
-                action = agent.sample_action(obs)
+            # with utils.eval_mode(agent):
+            # action = agent.sample_action(obs)
+
+            agent.set_train_mode()
+            action = agent.select_action(obs)
 
             # Run training update
-            num_updates = args.init_steps if train_step == args.init_steps else 1
+            num_updates = 1  # args.init_steps if train_step == args.init_steps else 1
             for i in range(num_updates):
-                agent.update(replay_buffer, L, train_step)
+                agent.update(
+                    replay_buffer, batch_size=256, logger=L, trainstep=train_step
+                )
 
         # Take train_step
         cum_reward = 0
+        looped = False
         for _ in range(args.action_repeat):
-            next_obs, reward, done, _ = env.step(action)
+            next_obs, reward, done, info = env.step(action)
+            looped = info["looped"]
             episode_step += 1
             done_bool = 0
+
             if episode_step + 1 != env._max_episode_steps:
                 done_bool = float(done)
 
             cum_reward += reward
+            distance = info["distance"]
+
             if done:
+                if info["goal"] is True:
+                    cum_reward = 0
                 break
 
         reward = cum_reward
-        distance = np.linalg.norm(np.array(next_obs[1][:2]))
+
+        # Update replay buffer
+        #        if not looped:
+        observation = (obs, action, reward, next_obs, done_bool)
+        replay_buffer.add(observation)
+
+        episode_reward += reward
 
         # Plot and update reward graph
-        # window_reward.update_plot_data(train_step, reward)
         window_reward.update_plot_data(train_step, -distance)
         app1.processEvents()
 
         window_tot_reward.update_labels(n_episode, episode_reward, action)
         app2.processEvents()
 
-        # Update replay buffer
-        observation = (obs, action, reward, next_obs, done_bool)
-        replay_buffer.add(observation)
-
-        episode_reward += reward
         obs = next_obs
         train_step += 1
 
@@ -346,8 +395,15 @@ if __name__ == "__main__":
             + 1
         )
 
+    folder = 10176
+    episode = 11900
+    load_model = (
+        f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",
+        episode,
+    )
+    load_model = None
     # try:
-    evaluated_episodes = main(args)
+    evaluated_episodes = main(args, load_model)
 
     # create video from images
     save_path = os.path.join("output", str(args.seed), "video_records", "avi")

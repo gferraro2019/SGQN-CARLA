@@ -59,10 +59,10 @@ def main(args):
     # Create the agent
     agent = make_agent(obs_shape=shp, action_shape=env.action_space.shape, args=args)
 
-    folder = 10164
+    folder = 10195
 
     # Load existing actor and critic
-    episodes = [str(i) for i in range(100, 2600, 100)]
+    episodes = [str(i) for i in range(100, 3000, 50)]
     for e in episodes:
         actor_state_dict = torch.load(
             f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/actor_{e}.pt"
@@ -80,7 +80,7 @@ def main(args):
 
         episode_rewards = []
 
-        for n_episode in range(2):
+        for n_episode in range(1):
             obs = env.reset()
             window_tot_reward.reset_tot_reward()
             app2.processEvents()
@@ -102,9 +102,10 @@ def main(args):
                             break
 
                     episode_reward += cum_reward
+                    distance = np.linalg.norm(np.array(obs[1][0:2]))
 
                     # Plot and update reward graph
-                    window_reward.update_plot_data(episode_step, episode_reward)
+                    window_reward.update_plot_data(episode_step, -distance)
                     app1.processEvents()
 
                     window_tot_reward.update_labels(n_episode, episode_reward, action)
@@ -121,6 +122,7 @@ def main(args):
 
 if __name__ == "__main__":
     np.seterr("ignore")
+    np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
     args = parse_args()
 
     app1 = QtWidgets.QApplication(sys.argv)
