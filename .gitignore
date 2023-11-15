@@ -6,6 +6,8 @@ output*/
 *.zip
 *.ipynb
 
+/runs
+
 # Editors
 .vscode/
 .idea/
