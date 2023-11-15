@@ -123,7 +123,7 @@ class Replay_Buffer_carla:
         self.idx = 0
         self.batch_size = batch_size
 
-        assert self.calculate_memory_allocation(state_shape, action_shape, reward_shape)
+        assert self.calculate_memory_allocation()
 
     def stack(self, observation, side):
         """This function concatenate numpy array in stacked tensor.
@@ -323,14 +323,14 @@ class Replay_Buffer_carla:
     def shuffle(self, sample_capacity):
         return random.sample(self.content, sample_capacity)
 
-    def calculate_memory_allocation(self, state_shape, action_shape, reward_shape):
+    def calculate_memory_allocation(self):
         n_bytes = 4
-        memory_allocation = self.capacity * state_shape[0][1] * state_shape[0][2]
-        memory_allocation += self.capacity * state_shape[1][1]
+        memory_allocation = self.capacity * self.states_img.element_size()
+        memory_allocation += self.capacity * self.states.element_size()
         memory_allocation *= 2  # accounting for next states
-        memory_allocation += self.capacity * action_shape[1]
-        memory_allocation += self.capacity * reward_shape[1]
-        memory_allocation += self.capacity * reward_shape[0]
+        memory_allocation += self.capacity * self.actions.element_size()
+        memory_allocation += self.capacity * self.rewards.element_size()
+        memory_allocation += self.capacity * self.dones.element_size()
         memory_allocation *= n_bytes
         memory_allocation /= 1e9
         msg = f"you will need {memory_allocation} GBytes of RAM"
