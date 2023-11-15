@@ -5,6 +5,7 @@ import time
 import numpy as np
 import torch
 from PyQt5 import QtCore, QtWidgets
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 import utils
@@ -22,12 +23,14 @@ from utils import (
 
 
 def main(args):
-    # Set seed
-    utils.set_seed_everywhere(args.seed)
+    # # Set seed
+    # utils.set_seed_everywhere(args.seed)
 
     frame_skip = 1
     max_episode_steps = (args.episode_length + frame_skip - 1) // frame_skip
 
+    # add tensorboard writer
+    args.writer_tensorboard = SummaryWriter()
     load_dataset_for_carla()
 
     car = "citroen.c3"
@@ -57,65 +60,78 @@ def main(args):
     print("Observations.shapenano:", shp)
 
     # Create the agent
-    agent = make_agent(obs_shape=shp, action_shape=env.action_space.shape, args=args)
+    agent = make_agent(obs_shape=shp, action_shape=[2], args=args)
 
-    folder = 10195
+    folder = 10366
 
+    k = 0
     # Load existing actor and critic
-    episodes = [str(i) for i in range(100, 3000, 50)]
+    episodes = [str(i) for i in range(50, 3000, 50)]
     for e in episodes:
-        actor_state_dict = torch.load(
-            f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/actor_{e}.pt"
-        )
-        critic_state_dict = torch.load(
-            f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/critic_{e}.pt"
-        )
+        try:
+            actor_state_dict = torch.load(
+                f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/actor_{e}.pt"
+            )
+            critic_state_dict = torch.load(
+                f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}/model/critic_{e}.pt"
+            )
 
-        print(f"Evaluating actor and critic realted to episode {e}")
+            print(f"Evaluating actor and critic realted to episode {e}")
 
-        agent.actor.load_state_dict(actor_state_dict)
-        agent.critic.load_state_dict(critic_state_dict)
+            agent.actor.load_state_dict(actor_state_dict)
+            agent.critic.load_state_dict(critic_state_dict)
 
-        # EVALUATE:
+            # EVALUATE:
 
-        episode_rewards = []
+            episode_rewards = []
 
-        for n_episode in range(1):
-            obs = env.reset()
-            window_tot_reward.reset_tot_reward()
-            app2.processEvents()
-            done = False
-            episode_reward = 0
-            episode_step = 0
-            while not done:
-                with torch.no_grad():
-                    with utils.eval_mode(agent):
-                        action = agent.select_action(obs)
+            start_time = time.time()
+            for n_episode in range(1):
+                obs = env.reset()
+                window_tot_reward.reset_tot_reward()
+                app2.processEvents()
+                done = False
+                episode_reward = 0
+                episode_step = 0
+                duration = 0
+                distance = None
+                while not done:
+                    with torch.no_grad():
+                        with utils.eval_mode(agent):
+                            action = agent.sample_action(obs)
 
-                    cum_reward = 0
-                    for _ in range(args.action_repeat):
-                        obs, reward, done, _ = env.step(action)
-                        episode_step += 1
-                        cum_reward += reward
+                        cum_reward = 0
+                        for _ in range(args.action_repeat):
+                            obs, reward, done, _ = env.step(action)
+                            episode_step += 1
+                            cum_reward += reward
 
-                        if done:
-                            break
+                            if done:
+                                break
 
-                    episode_reward += cum_reward
-                    distance = np.linalg.norm(np.array(obs[1][0:2]))
+                        episode_reward += cum_reward
+                        distance = np.linalg.norm(np.array(obs[1][0:2]))
 
-                    # Plot and update reward graph
-                    window_reward.update_plot_data(episode_step, -distance)
-                    app1.processEvents()
+                        # Plot and update reward graph
+                        window_reward.update_plot_data(episode_step, -distance)
+                        app1.processEvents()
 
-                    window_tot_reward.update_labels(n_episode, episode_reward, action)
-                    app2.processEvents()
+                        window_tot_reward.update_labels(
+                            n_episode, episode_reward, action
+                        )
+                        app2.processEvents()
 
-            episode_rewards.append(episode_reward)
+                duration = time.time() - start_time
+                args.writer_tensorboard.add_scalar("Train/duration", duration, k)
+                args.writer_tensorboard.add_scalar("Train/distance", distance, k)
+                args.writer_tensorboard.add_scalar("Train/return", episode_reward, k)
+                episode_rewards.append(episode_reward)
+                k += 1
+        except:
+            print(f"model {e} not exist")
+        # import matplotlib.pyplot as plt
 
-        import matplotlib.pyplot as plt
-
-        plt.plot(episode_rewards)
+        # plt.plot(episode_rewards)
         # plt.title(f"Evaluating actor and critic realted to episode {e}")
         # plt.show()
 

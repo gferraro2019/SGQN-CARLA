@@ -27,6 +27,7 @@ class SAC(object):
         self.encoder_tau = args.encoder_tau
         self.actor_update_freq = args.actor_update_freq
         self.critic_target_update_freq = args.critic_target_update_freq
+        self.writer = args.writer_tensorboard
 
         shared_cnn = m.SharedCNN(
             obs_shape[0], args.num_shared_layers, args.num_filters
@@ -139,6 +140,8 @@ class SAC(object):
         critic_loss.backward()
         self.critic_optimizer.step()
 
+        return critic_loss
+
     def update_actor_and_alpha(self, obs, L=None, step=None, update_alpha=True):
         _, pi, log_pi, log_std = self.actor(obs[0], detach=True)
         actor_Q1, actor_Q2 = self.critic(obs[0], pi, obs[1], detach=True)
@@ -167,6 +170,8 @@ class SAC(object):
             alpha_loss.backward()
             self.log_alpha_optimizer.step()
 
+        return actor_loss, alpha_loss
+
     def soft_update_critic_target(self):
         utils.soft_update_params(self.critic.Q1, self.critic_target.Q1, self.critic_tau)
         utils.soft_update_params(self.critic.Q2, self.critic_target.Q2, self.critic_tau)
@@ -177,10 +182,15 @@ class SAC(object):
     def update(self, replay_buffer, L, step):
         obs, action, reward, next_obs, not_done = replay_buffer.sample()
 
-        self.update_critic(obs, action, reward, next_obs, not_done, L, step)
+        critic_loss = self.update_critic(
+            obs, action, reward, next_obs, not_done, L, step
+        )
+        self.writer.add_scalar("Loss/critic_loss", critic_loss, step)
 
         if step % self.actor_update_freq == 0:
-            self.update_actor_and_alpha(obs, L, step)
+            actor_loss, alpha_loss = self.update_actor_and_alpha(obs, L, step)
+            self.writer.add_scalar("Loss/actor_loss", actor_loss, step)
+            self.writer.add_scalar("Loss/alpha_loss", alpha_loss, step)
 
         if step % self.critic_target_update_freq == 0:
             self.soft_update_critic_target()
