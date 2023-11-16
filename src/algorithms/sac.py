@@ -102,7 +102,7 @@ class SAC(object):
             _obs = np.vstack(_obs[[0, 2, 4]])
         else:
             _obs = obs
-        _obs = torch.FloatTensor(_obs).cuda()
+        _obs = torch.FloatTensor(_obs[0]).cuda()
         _obs = _obs.unsqueeze(0)
         return _obs
 

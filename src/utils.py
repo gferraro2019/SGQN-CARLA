@@ -95,7 +95,8 @@ import random
 
 import numpy as np
 import torch
-from carla_dqn import device
+
+# from carla_dqn import device
 from torch.utils.data import IterableDataset
 
 
@@ -152,7 +153,7 @@ class Replay_Buffer_carla:
             self.states_img = torch.cat(
                 [
                     self.states_img,
-                    torch.tensor(observation[0].frames[2][0], dtype=torch.float32)
+                    torch.tensor(observation[0][0][6:9], dtype=torch.float32)
                     .unsqueeze(0)
                     .to(self.device),
                 ],
@@ -161,7 +162,7 @@ class Replay_Buffer_carla:
             self.states = torch.cat(
                 [
                     self.states,
-                    torch.tensor(observation[0].frames[2][1], dtype=torch.float32)
+                    torch.tensor(observation[0][1][-9:], dtype=torch.float32)
                     .unsqueeze(0)
                     .to(self.device),
                 ],
@@ -188,7 +189,7 @@ class Replay_Buffer_carla:
             self.next_states_img = torch.cat(
                 [
                     self.next_states_img,
-                    torch.tensor(observation[3].frames[2][0], dtype=torch.float32)
+                    torch.tensor(observation[3][0][6:9], dtype=torch.float32)
                     .unsqueeze(0)
                     .to(self.device),
                 ],
@@ -197,7 +198,7 @@ class Replay_Buffer_carla:
             self.next_states = torch.cat(
                 [
                     self.next_states,
-                    torch.tensor(observation[3].frames[2][1], dtype=torch.float32)
+                    torch.tensor(observation[3][1][-9:], dtype=torch.float32)
                     .unsqueeze(0)
                     .to(self.device),
                 ],
@@ -216,13 +217,13 @@ class Replay_Buffer_carla:
         else:
             # self.content[self.idx] = observation
             self.states_img[self.idx] = (
-                torch.tensor(observation[0].frames[2][0], dtype=torch.float32)
+                torch.tensor(observation[0][0][6:9], dtype=torch.float32)
                 .unsqueeze(0)
                 .to(self.device)
             )
 
             self.states[self.idx] = (
-                torch.tensor(observation[0].frames[2][1], dtype=torch.float32)
+                torch.tensor(observation[0][1][-9:], dtype=torch.float32)
                 .unsqueeze(0)
                 .to(self.device)
             )
@@ -240,13 +241,13 @@ class Replay_Buffer_carla:
             )
 
             self.next_states_img[self.idx] = (
-                torch.tensor(observation[3].frames[2][0], dtype=torch.float32)
+                torch.tensor(observation[3][0][6:9], dtype=torch.float32)
                 .unsqueeze(0)
                 .to(self.device)
             )
 
             self.next_states[self.idx] = (
-                torch.tensor(observation[3].frames[2][1], dtype=torch.float32)
+                torch.tensor(observation[3][1][-9:], dtype=torch.float32)
                 .unsqueeze(0)
                 .to(self.device)
             )

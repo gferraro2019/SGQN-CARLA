@@ -306,7 +306,14 @@ class FrameStack_carla(gym.Wrapper):
 
     def _get_obs(self):
         assert len(self._frames) == self._k
-        return utils.LazyFrames(list(self._frames))
+        # return utils.LazyFrames(list(self._frames))
+        images = np.concatenate(
+            [self._frames[0][0], self._frames[1][0], self._frames[2][0]], axis=0
+        )
+        states = np.concatenate(
+            [self._frames[0][1], self._frames[1][1], self._frames[2][1]], axis=0
+        )
+        return (images, states)
 
 
 import os

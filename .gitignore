@@ -5,8 +5,9 @@ log*/
 output*/
 *.zip
 *.ipynb
-
+video*
 /runs
+/CARLA*
 
 # Editors
 .vscode/
