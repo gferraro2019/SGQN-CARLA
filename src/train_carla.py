@@ -6,6 +6,7 @@ import time
 import numpy as np
 import torch
 from PyQt5 import QtCore, QtWidgets
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 import simple_sac
@@ -30,33 +31,38 @@ def evaluate(
     n_episodes,
     L,
     step,
+    args,
     test_env=False,
     eval_mode=None,
 ):
-    episode_rewards = []
+    episode_returns = []
     distance = None
     for n_episode in range(n_episodes):
         obs = env.reset()
         window_tot_reward.reset_tot_reward()
         app2.processEvents()
         done = False
-        episode_reward = 0
+        episode_return = 0
         episode_step = 0
         torch_obs = []
         torch_action = []
+        steps = 0
         while not done:
             with torch.no_grad():
-                # with utils.eval_mode(agent):
-                #     action = agent.select_action(obs)
+                with utils.eval_mode(agent):
+                    action = agent.sample_action(obs)
                 #         else:
                 # with utils.eval_mode(agent):
                 # action = agent.sample_action(obs)
-                agent.set_eval_mode()
-                action = agent.select_action(obs)
+
+                # #simple sac
+                # agent.set_eval_mode()
+                # action = agent.select_action(obs)
 
                 cum_reward = 0
                 # repeat action k times
                 for _ in range(args.action_repeat):
+                    steps += 1
                     obs, reward, done, info = env.step(action)
                     episode_step += 1
                     cum_reward += reward
@@ -65,14 +71,14 @@ def evaluate(
                     if done:
                         break
 
-                episode_reward += cum_reward
+                episode_return += cum_reward
 
                 # Plot and update reward graph
-                # window_reward.update_plot_data(episode_step, episode_reward)
+                # window_reward.update_plot_data(episode_step, episode_return)
                 window_reward.update_plot_data(episode_step, -distance)
                 app1.processEvents()
 
-                window_tot_reward.update_labels(env.episode, episode_reward, action)
+                window_tot_reward.update_labels(env.episode, episode_return, action)
                 app2.processEvents()
                 # log in tensorboard 15th step
                 if algorithm == "sgsac":
@@ -94,10 +100,13 @@ def evaluate(
         if L is not None:
             # _test_env = f"_test_env_{eval_mode}" if test_env else ""
             L.log(f"eval/episode", n_episode, step)
-            L.log(f"eval/episode_reward", episode_reward, step)
+            L.log(f"eval/episode_return", episode_return, step)
             L.log("eval/distance", distance, step)
             L.dump(step)
-        episode_rewards.append(episode_reward)
+        episode_returns.append(episode_return)
+
+        args.writer_tensorboard.add_scalar("Eval/distance", distance, step)
+        args.writer_tensorboard.add_scalar("Eval/return", episode_return, step)
 
 
 def main(
@@ -121,6 +130,9 @@ def main(
 
     model_dir = utils.make_dir(os.path.join(work_dir, "model"))
     utils.write_info(args, os.path.join(work_dir, "info.log"))
+
+    # add tensorboard writer
+    args.writer_tensorboard = SummaryWriter()
 
     # Define logger
     L = Logger(work_dir)
@@ -204,17 +216,20 @@ def main(
 
     # Create replay buffer
     replay_buffer = utils.Replay_Buffer_carla(
-        capacity=args.capacity, batch_size=args.batch_size, device="cuda"
+        capacity=args.capacity, batch_size=args.batch_size, device=args.device
     )
 
     print("Observations:", env.observation_space.shape)
 
-    shp = (env.observation_space[0].shape, env.observation_space[1].shape)
-    print("Observations.shape:", shp)
+    shp_observation = (env.observation_space[0].shape, env.observation_space[1].shape)
+    print("Observations.shape:", shp_observation)
+
+    shp_action = [2]
+    print("actions.shape:", shp_action)
 
     # Create the agent
-    # agent = make_agent(obs_shape=shp, action_shape=env.action_space.shape, args=args)
-    agent = simple_sac.SACAgent(state_dim=shp, action_dim=2)
+    agent = make_agent(obs_shape=shp_observation, action_shape=shp_action, args=args)
+    # agent = simple_sac.SACAgent(state_dim=shp, action_dim=2)
 
     # load existing model to keep training it
     if load_model is not None:
@@ -231,13 +246,12 @@ def main(
         print(f"Loaded actor and critic from episode {episode}")
 
     # Initialize variables
-    n_episode, episode_reward, done = 0, 0, True
+    n_episode, episode_return, done = -1, 0, True
     evaluated_episodes = []
     distance = 5
 
     # Start training
-    start_time = time.time()
-    train_step = 0
+    steps_per_episode = 0
     for train_step in range(0, args.train_steps + 1):
         # while n_episode < args.n_episodes + 1:
         # EVALUATE:
@@ -245,19 +259,37 @@ def main(
             # if train_step > 0:
             if n_episode > 0:
                 L.log("train/episode", n_episode, train_step - 1)
-                L.log("train/duration", time.time() - start_time, train_step - 1)
+                L.log(
+                    "train/steps_per_episode",
+                    steps_per_episode,
+                    train_step - 1,
+                )
                 L.log("train/distance", distance, train_step - 1)
+                L.log("train/return", episode_return, train_step - 1)
+
                 L.dump(train_step - 1)
 
+                args.writer_tensorboard.add_scalar(
+                    "Train/steps_per_episode",
+                    steps_per_episode,
+                    train_step - 1,
+                )
+                args.writer_tensorboard.add_scalar(
+                    "Train/distance", distance, train_step - 1
+                )
+                args.writer_tensorboard.add_scalar(
+                    "Train/return", episode_return, train_step - 1
+                )
+
                 # Save agent periodically
-                if n_episode % args.save_freq == 0 and n_episode > 1:
+                if n_episode % args.save_freq == 0:
                     torch.save(
                         agent.actor.state_dict(),
                         os.path.join(model_dir, f"actor_{n_episode}.pt"),
                     )
                     torch.save(
-                        # agent.critic.state_dict(),
-                        agent.critic1.state_dict(),
+                        agent.critic.state_dict(),
+                        # agent.critic1.state_dict(),
                         os.path.join(model_dir, f"critic_{n_episode}.pt"),
                     )
                     if args.algorithm == "sgsac":
@@ -266,38 +298,37 @@ def main(
                             os.path.join(model_dir, f"attrib_predictor_{n_episode}.pt"),
                         )
 
-            # Evaluate agent periodically
-            if n_episode % args.eval_freq == 0 and n_episode > 0:
-                print("Evaluating:", work_dir)
-                L.log("eval/episode", n_episode, train_step - 1)
-                # evaluate(env, agent, args.algorithm, args.eval_episodes, L, train_step)
-                test_env.env.episode = n_episode
-                if test_envs is not None:
-                    for test_env, test_env_mode in zip(test_envs, test_envs_mode):
-                        evaluate(
-                            test_env,
-                            agent,
-                            args.algorithm,
-                            args.eval_episodes,
-                            L,
-                            train_step - 1,
-                            test_env=True,
-                            eval_mode=test_env_mode,
-                        )
-                L.dump(train_step - 1)
+                # Evaluate agent periodically
+                if n_episode % args.eval_freq == 0:
+                    print("Evaluating:", work_dir)
+                    L.log("eval/episode", n_episode, train_step - 1)
+                    # evaluate(env, agent, args.algorithm, args.eval_episodes, L, train_step)
+                    test_env.env.episode = n_episode
+                    if test_envs is not None:
+                        for test_env, test_env_mode in zip(test_envs, test_envs_mode):
+                            evaluate(
+                                test_env,
+                                agent,
+                                args.algorithm,
+                                args.eval_episodes,
+                                L,
+                                train_step - 1,
+                                args,
+                                test_env=True,
+                                eval_mode=test_env_mode,
+                            )
+                    L.dump(train_step - 1)
 
-                # update list evaluated episode  in order to crete the video after the training
-                for i in range(args.eval_episodes):
-                    evaluated_episodes.append(n_episode + i)
-
-            L.log("train/episode_reward", episode_reward, train_step - 1)
-            L.log("train/episode", n_episode, train_step - 1)
+                    # update list evaluated episode  in order to crete the video after the training
+                    for i in range(args.eval_episodes):
+                        evaluated_episodes.append(n_episode + i)
 
             # Reset environment
             obs = env.reset()
             done = False
-            episode_reward = 0
+            episode_return = 0
             episode_step = 0
+            steps_per_episode = 0  # for trackingsteps_per_episode
             window_tot_reward.reset_tot_reward()
             app2.processEvents()
 
@@ -305,33 +336,47 @@ def main(
             torch.cuda.empty_cache()
 
             n_episode += 1
-            start_time = time.time()
 
         # TRAIN:
         # Sample action for data collection
         if train_step < args.init_steps:
             action = env.action_space.sample()
+            # a = np.zeros(2)
+            # a[0] = np.clip(action[0], 0, 1)
+            # a[1] = np.clip(action[1], -0.3, 0.3)
             action = np.concatenate((action[0], action[1]))
         else:
-            # with utils.eval_mode(agent):
-            # action = agent.sample_action(obs)
+            # sgqn
+            with utils.eval_mode(agent):
+                action = agent.sample_action(obs)
+                # a = np.zeros(2)
+                # a[0] = np.clip(action[0], 0, 1)
+                # a[1] = np.clip(action[1], -0.3, 0.3)
+                # action = a  # np.concatenate((a[0], a[1]))
+            #     action[0] = np.clip(action[0], 0, 1)
+            #     action[1] = np.clip(action[1], -0.3, 0.3)
 
-            agent.set_train_mode()
-            action = agent.select_action(obs)
+            # simple sac
+            # agent.set_train_mode()
+            # action = agent.select_action(obs)
 
             # Run training update
             num_updates = 1  # args.init_steps if train_step == args.init_steps else 1
+
             for i in range(num_updates):
-                agent.update(
-                    replay_buffer, batch_size=256, logger=L, trainstep=train_step
-                )
+                agent.update(replay_buffer, L, train_step)
+
+                # simple sac
+                # agent.update(
+                #     replay_buffer, batch_size=256, logger=L, trainstep=train_step
+                # )
 
         # Take train_step
         cum_reward = 0
-        looped = False
         for _ in range(args.action_repeat):
+            steps_per_episode += 1
             next_obs, reward, done, info = env.step(action)
-            looped = info["looped"]
+
             episode_step += 1
             done_bool = 0
 
@@ -341,10 +386,10 @@ def main(
             cum_reward += reward
             distance = info["distance"]
 
-            if done:
-                if info["goal"] is True:
-                    cum_reward = 0
-                break
+            # if done:
+            #     if info["goal"] is True:
+            #         cum_reward = 0
+            #     break
 
         reward = cum_reward
 
@@ -353,27 +398,35 @@ def main(
         observation = (obs, action, reward, next_obs, done_bool)
         replay_buffer.add(observation)
 
-        episode_reward += reward
+        episode_return += reward
 
         # Plot and update reward graph
         window_reward.update_plot_data(train_step, -distance)
         app1.processEvents()
 
-        window_tot_reward.update_labels(n_episode, episode_reward, action)
+        window_tot_reward.update_labels(n_episode, episode_return, action)
         app2.processEvents()
 
         obs = next_obs
-        train_step += 1
 
     print("Completed training for", work_dir)
     return evaluated_episodes
 
 
 if __name__ == "__main__":
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "caching_allocator"
+    from tensorboard import program
+
+    tracking_address = "runs"
+    tb = program.TensorBoard()
+    tb.configure(argv=[None, "--logdir", tracking_address, "--port", str(7008)])
+    url = tb.launch()
+    print(f"Tensorflow listening on {url}")
+
+    # os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "caching_allocator"
     np.seterr("ignore")
-    np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
+    # np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
     args = parse_args()
+    args.device = "cpu"
 
     app1 = QtWidgets.QApplication(sys.argv)
     window_reward = MainWindow_Reward()
@@ -395,8 +448,8 @@ if __name__ == "__main__":
             + 1
         )
 
-    folder = 10176
-    episode = 11900
+    folder = 10379
+    episode = 4000
     load_model = (
         f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",
         episode,

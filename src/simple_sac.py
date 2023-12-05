@@ -27,14 +27,17 @@ class Actor(nn.Module):
         x1 = F.relu(self.conv2(x1))
         x1 = F.relu(self.conv3(x1))
         # x1 = x1.view(x1.size(0), -1)  # Flatten
+
         if len(state1.shape) == 3:
             x1 = torch.flatten(x1, start_dim=0)
             x2 = F.relu(self.fc1(torch.cat([x1, state2], dim=0)))
         else:
             x1 = torch.flatten(x1, start_dim=1)
             x2 = F.relu(self.fc1(torch.cat([x1, state2], dim=1)))
+
         x2 = F.relu(self.fc2(x2))
         action = torch.tanh(self.fc3(x2))
+
         if len(action.shape) > 1:
             action = torch.cat(
                 ((action[:, 0] * 0.5 + 0.5).unsqueeze(1), action[:, 1].unsqueeze(1)),
@@ -105,7 +108,7 @@ class SACAgent:
     def select_action(self, state):
         state1, state2, state3 = state.frames
 
-        # Converte le liste in tensori PyTorch
+        # Convert lists in tensors
         state1_image = torch.FloatTensor(state1[0]).to(device)
         state2_image = torch.FloatTensor(state2[0]).to(device)
         state3_image = torch.FloatTensor(state3[0]).to(device)
@@ -114,17 +117,17 @@ class SACAgent:
         state2_array = torch.FloatTensor(state2[1]).to(device)
         state3_array = torch.FloatTensor(state3[1]).to(device)
 
-        # Concatena le immagini RGB lungo l'asse dei canali
+        # Concatenate  RGB images in channell axis
         state_combined_image = torch.cat(
             [state1_image, state2_image, state3_image], dim=0
         )
 
-        # Concatena gli array di 9 elementi lungo la dimensione 0
+        # Concatenate  9 elements
         state_combined_array = torch.cat(
             [state1_array, state2_array, state3_array], dim=0
         )
 
-        # Passa lo stato combinato al modello dell'attore
+        # compute action
         action = self.actor([state_combined_image, state_combined_array])
 
         if self.actor.training:

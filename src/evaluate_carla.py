@@ -14,12 +14,8 @@ from arguments import parse_args
 from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla, VideoRecord_carla
 from logger import Logger
-from utils import (
-    MainWindow_Reward,
-    MainWindow_Tot_Reward,
-    create_video_from_images,
-    load_dataset_for_carla,
-)
+from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
+                   create_video_from_images, load_dataset_for_carla)
 
 
 def main(args):
@@ -62,11 +58,11 @@ def main(args):
     # Create the agent
     agent = make_agent(obs_shape=shp, action_shape=[2], args=args)
 
-    folder = 10366
+    folder = 10530
 
     k = 0
     # Load existing actor and critic
-    episodes = [str(i) for i in range(50, 3000, 50)]
+    episodes = [str(i) for i in range(50, 1000, 50)]
     for e in episodes:
         try:
             actor_state_dict = torch.load(

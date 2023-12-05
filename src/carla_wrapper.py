@@ -1,47 +1,41 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
 import glob
 import math
+# # from agents.navigation.roaming_agent import RoamingAgent
 import os
 import queue
 import random
 import sys
 import time
 
+# In[1]:
 import carla
 import gym
 import numpy as np
 import pygame
 from gym import spaces
 
-from utils import (
-    clamp,
-    draw_image,
-    get_actor_name,
-    get_font,
-    should_quit,
-    vector_to_scalar,
-)
+from utils import (clamp, draw_image, get_actor_name, get_font, should_quit,
+                   vector_to_scalar)
 
 # from agents.navigation.roaming_agent import RoamingAgent
 try:
     sys.path.append(
         glob.glob(
-            "../carla/dist/carla-*%d.%d-%s.egg"
-            % (
-                sys.version_info.major,
-                sys.version_info.minor,
-                "win-amd64" if os.name == "nt" else "linux-x86_64",
-            )
+            "/home/dcas/g.ferraro/Desktop/CARLA/CARLA_0.9.14/PythonAPI/carla/dist/carla-0.9.14-py3.7-linux-x86_64.egg"
+            # glob.glob(
+            #     "../carla/dist/carla-*%d.%d-%s.egg"
+            #     % (
+            #         sys.version_info.major,
+            #         sys.version_info.minor,
+            #         "win-amd64" if os.name == "nt" else "linux-x86_64",
+            #     )
         )[0]
     )
 except IndexError:
     pass
-
-
-from scipy.special import expit as sigmoid
 
 
 class CarlaEnv(gym.Env):
@@ -105,29 +99,31 @@ class CarlaEnv(gym.Env):
         self._max_episode_steps = int(max_episode_steps)
         self.time_step = 0
 
+        self.previous_steer = 0
+
         self.visualize_target = visualize_target
 
-        self.check_loop_buffer = np.zeros(
-            int(self._max_episode_steps / 4)
-        )  # track the distances to avoid loops
-        self.sinx = [
-            np.array(
-                [
-                    np.sin(x / alpha)
-                    for x in range(0, int(self._max_episode_steps / 4), 1)
-                ]
-            )
-            for alpha in range(4, 14)
-        ]
-        self.cosx = [
-            np.array(
-                [
-                    np.cos(x / alpha)
-                    for x in range(0, int(self._max_episode_steps / 4), 1)
-                ]
-            )
-            for alpha in range(4, 14)
-        ]
+        # self.check_loop_buffer = np.zeros(
+        #     int(self._max_episode_steps / 4)
+        # )  # track the distances to avoid loops
+        # self.sinx = [
+        #     np.array(
+        #         [
+        #             np.sin(x / alpha)
+        #             for x in range(0, int(self._max_episode_steps / 4), 1)
+        #         ]
+        #     )
+        #     for alpha in range(4, 14)
+        # ]
+        # self.cosx = [
+        #     np.array(
+        #         [
+        #             np.cos(x / alpha)
+        #             for x in range(0, int(self._max_episode_steps / 4), 1)
+        #         ]
+        #     )
+        #     for alpha in range(4, 14)
+        # ]
 
         # to end the task when the lower limit is reached
         self.lower_limit_return_ = lower_limit_return_
@@ -256,7 +252,6 @@ class CarlaEnv(gym.Env):
         )
         self.lane_invasion_sensor.listen(lambda event: self._on_lane_invasion(event))
         self.n_lane_invasions = 0
-        self.lane_invasion_event = None
 
         #         # initialize autopilot
         #         self.agent = RoamingAgent(self.vehicle)
@@ -288,7 +283,7 @@ class CarlaEnv(gym.Env):
         # gym environment specific variables
         self.action_space = spaces.Tuple(
             (
-                spaces.Box(0, 1.0, shape=(1,), dtype="float32"),
+                spaces.Box(-1, 1.0, shape=(1,), dtype="float32"),
                 spaces.Box(-1.0, 1.0, shape=(1,), dtype="float32"),
             )
         )
@@ -301,7 +296,7 @@ class CarlaEnv(gym.Env):
 
     def _fix_waypoint(self):
         """This function set the global waypoint and return a trasform object of a
-        waypoint placed always 2 m behind the first.
+        waypoint placed always 5 m behind the first.
 
         Returns:
             transform: the trasfirm object of antecedent waypoint to the global one
@@ -328,6 +323,8 @@ class CarlaEnv(gym.Env):
         return transform
 
     def reset(self):
+        # self.lane_invasion = False
+        # self.collision = False
         self.check_loop_buffer = np.zeros(
             int(self._max_episode_steps / 4)
         )  # track the distances to avoid loops
@@ -484,6 +481,74 @@ class CarlaEnv(gym.Env):
     def _compute_action(self):
         return self.agent.run_step()
 
+    def plotLane(self, lane_idx):
+        """Plot waypoints in the map according to the lane id
+
+        Args:
+            lane_idx (list): list of lane IDs
+        """
+        import matplotlib.pyplot as plt
+
+        topology = self.map.generate_waypoints(8)  # self.map.get_topology()
+        print(len(topology))
+        lane_m5 = {"x": [], "y": [], "junction_id": [], "road_id": []}
+        lane_m4 = {"x": [], "y": [], "junction_id": [], "road_id": []}
+        lane_m3 = {"x": [], "y": [], "junction_id": [], "road_id": []}
+        lane_m2 = {"x": [], "y": [], "junction_id": [], "road_id": []}
+        lane_m1 = {"x": [], "y": [], "junction_id": [], "road_id": []}
+        lane_0 = {"x": [], "y": [], "junction_id": [], "road_id": []}
+        lane_p1 = {"x": [], "y": [], "junction_id": [], "road_id": []}
+        lane_p2 = {"x": [], "y": [], "junction_id": [], "road_id": []}
+        lane_p3 = {"x": [], "y": [], "junction_id": [], "road_id": []}
+        lane_p4 = {"x": [], "y": [], "junction_id": [], "road_id": []}
+        lane_p5 = {"x": [], "y": [], "junction_id": [], "road_id": []}
+
+        lanes = {
+            -5: lane_m5,
+            -4: lane_m4,
+            -3: lane_m3,
+            -2: lane_m2,
+            -1: lane_m1,
+            0: lane_0,
+            1: lane_p1,
+            2: lane_p2,
+            3: lane_p3,
+            4: lane_p4,
+            5: lane_p5,
+        }
+
+        for wp in topology:
+            # print(wp.lane_id)
+            if "Driving" in str(wp.lane_type):
+                lanes[wp.lane_id]["x"].append(wp.transform.location.x)
+                lanes[wp.lane_id]["y"].append(wp.transform.location.y)
+                lanes[wp.lane_id]["road_id"].append(wp.road_id)
+                lanes[wp.lane_id]["junction_id"].append(wp.junction_id)
+
+        plt.figure()
+        plotted = []
+        for id_lane in lanes:
+            if id_lane in lane_idx:
+                # print(id_lane)
+                color = (
+                    np.array(
+                        (
+                            random.randint(0, 255),
+                            random.randint(0, 255),
+                            random.randint(0, 255),
+                        )
+                    )
+                    / 255
+                )
+                try:
+                    plt.scatter(lanes[id_lane]["x"], lanes[id_lane]["y"], color=color)
+                    plotted.append(id_lane)
+                except:
+                    print(f"not valid lane {id_lane}")
+                    plotted.pop()
+        plt.legend(plotted, bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
+        return lanes
+
     def step(self, action):
         rewards = []
         next_obs, done, info = None, False, {}
@@ -579,7 +644,7 @@ class CarlaEnv(gym.Env):
             pygame.display.flip()
 
         # get reward and next observation
-        reward, done, info = self._get_reward(steer)
+        reward, done, info = self._get_reward(throttle_brake, steer)
 
         # update cumulative reward to interupt if the lower limit is reached
         self.return_ += reward
@@ -652,15 +717,15 @@ class CarlaEnv(gym.Env):
         velocity = vector_to_scalar(self.vehicle.get_velocity())
         return np.array(
             [
-                round(dx_pos, 3),
-                round(dy_pos, 3),
-                round(dz_pos, 3),
-                round(delta_pitch / 360, 3),
-                round(delta_yaw / 360, 3),
-                round(delta_roll / 360, 3),
-                round(acceleration, 3),
-                round(angular_velocity, 3),
-                round(velocity, 3),
+                round(dx_pos, 4),
+                round(dy_pos, 4),
+                round(dz_pos, 4),
+                round(delta_pitch / 360, 4),
+                round(delta_yaw / 360, 4),
+                round(delta_roll / 360, 4),
+                round(acceleration, 4),
+                round(angular_velocity, 4),
+                round(velocity, 4),
             ],
             dtype=np.float32,
         )
@@ -707,7 +772,7 @@ class CarlaEnv(gym.Env):
 
     #     return total_reward, done, info_dict
 
-    def _get_reward(self, steer):
+    def _get_reward(self, throttle, steer):
         info_dict = dict()
         info_dict["looped"] = False
         goal, done, total_reward = False, False, 0
@@ -717,70 +782,68 @@ class CarlaEnv(gym.Env):
             (vehicle_location.x - self.waypoint.location.x) ** 2
             + (vehicle_location.y - self.waypoint.location.y) ** 2
         )
-        # check if is turning in loops
-        self.check_loop_buffer[-1] = distance
-        self.check_loop_buffer = np.roll(self.check_loop_buffer, -1)
-        corr1 = max(
-            [abs(np.corrcoef(self.check_loop_buffer, sinx)[1, 0]) for sinx in self.sinx]
-        )
-        # corr2 = max(
-        #     [abs(np.corrcoef(self.check_loop_buffer, cosx)[1, 0]) for cosx in self.cosx]
-        # )
 
-        # avoid vehicle loops
-        threshold = 0.6
-        if corr1 >= threshold:  # or corr2 >= threshold:
-            # done = True
-            total_reward -= 100  # self._max_episode_steps
-            info_dict["looped"] = True
-
-        if distance <= 0.6:
+        if distance <= 4:
             done, collision_reward = True, 0
-            follow_waypoint_reward = 0
+            total_reward = 1
             goal = True
-        elif distance > 0.6 and distance <= self.max_distance_from_waypoint:
-            follow_waypoint_reward = -1  # -distance
-            done, collision_reward = False, 0
-        elif distance > self.max_distance_from_waypoint:
-            follow_waypoint_reward = -100  # -distance
-            done, collision_reward = False, 0
-
-        cost = 0
-        if self.n_lane_invasions != 0:
-            total_reward = (
-                follow_waypoint_reward + collision_reward + self.n_lane_invasions * -1
-            )
-            # self.n_lane_invasions = 0
-            if self.lane_invasion >= 3:
-                done = True
-                total_reward -= 100  # self._max_episode_steps
-
         else:
-            total_reward = follow_waypoint_reward + collision_reward
+            total_reward = -1
 
-        vehicle_velocity = self.vehicle.get_velocity()
-        speed = round(
-            3.6 * np.linalg.norm(np.array([vehicle_velocity.x, vehicle_velocity.y])), 3
-        )
+        # #     self.waypoint = self.map.get_waypoint(
+        # #         self.vehicle.get_tranform().location,
+        # #         project_to_road=True,
+        # #         lane_type=carla.LaneType.Driving,
+        # #     )
+        # #     total_reward = 1
+        # diff_angle = abs(steer - self.previous_steer)
+        # if diff_angle > 0.3:
+        #     total_reward += -diff_angle
+        # else:
+        #     total_reward += 1-diff_angle
 
-        if speed >= 30:
-            total_reward -= 100
-        if speed == 0 and distance > 0:
-            total_reward = -100
+        # self.previous_steer = steer
 
-        info_dict["follow_waypoint_reward"] = follow_waypoint_reward
-        info_dict["collision_reward"] = collision_reward
-        info_dict["cost"] = cost
+        # # # cost = 0
+        # if self.lane_invasion or self.collision:
+        #     done = True
+        #     total_reward += -100
+        #     self.lane_invasion = False
+        #     self.collision = False
+
+        # # #     # self.lane_invasions = 0
+        # # #     if self.lane_invasion >= 3:
+        # # #         done = True
+        # # #         total_reward += -100  # self._max_episode_steps
+
+        # # # else:
+        # # #     total_reward += follow_waypoint_reward + collision_reward
+
+        # vehicle_velocity = self.vehicle.get_velocity()
+        # speed = round(
+        #     3.6 * np.linalg.norm(np.array([vehicle_velocity.x, vehicle_velocity.y])), 3
+        # )
+        # if speed < 10:
+        #     total_reward += -1
+        # else:
+        #     total_reward += 1
+
+        # if throttle > 0:
+        #     total_reward += throttle / 10
+        # # if speed == 0 and distance > 0:
+        # #     total_reward += -100
+
+        # info_dict["follow_waypoint_reward"] = follow_waypoint_reward
+        # info_dict["collision_reward"] = collision_reward
+        # info_dict["cost"] = cost
         info_dict["distance"] = distance
         info_dict["goal"] = goal
 
         # clip reward between -1 and 0
         # if total_reward != 0:
         # total_reward = sigmoid(total_reward - abs(steer)) - 0.5
-        if goal is False:
-            total_reward = total_reward - abs(steer) * 4  # / self._max_episode_steps
-        else:
-            total_reward = 0
+        # if goal:
+        #     total_reward += 1000
 
         return total_reward / 100, done, info_dict
 
@@ -803,14 +866,14 @@ class CarlaEnv(gym.Env):
         return 0
 
     def _on_collision(self, event):
-        other_actor = get_actor_name(event.other_actor)
+        # other_actor = get_actor_name(event.other_actor)
         self.collision = True
-        self._reset_vehicle(from_fixed_point=True)
+        # self._reset_vehicle(from_fixed_point=True)
 
     def _on_lane_invasion(self, event):
-        self.lane_invasion_event = event
-        print(event.crossed_lane_markings)
-        self.n_lane_invasions = len(event.crossed_lane_markings) * -100
+        # self.lane_invasion_event = event
+        # print(event.crossed_lane_markings)
+        self.lane_invasion = True  # len(event.crossed_lane_markings) * -100
 
     def close(self):
         for actor in self.actor_list:

@@ -10,8 +10,8 @@ FORMAT_CONFIG = {
         "train": [
             ("episode", "E", "int"),
             ("step", "S", "int"),
-            ("duration", "D", "time"),
-            ("episode_reward", "R", "float"),
+            ("steps_per_episode", "D", "int"),
+            ("return", "R", "float"),
             ("distance", "d", "float"),
             ("actor_loss", "ALOSS", "float"),
             ("alpha_loss", "alphaLOSS", "float"),
