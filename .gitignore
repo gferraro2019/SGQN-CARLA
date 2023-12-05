@@ -8,6 +8,8 @@ output*/
 video*
 /runs
 /CARLA*
+events*
+replay_buffer*
 
 # Editors
 .vscode/
