@@ -16,12 +16,8 @@ from arguments import parse_args
 from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla, VideoRecord_carla
 from logger import Logger
-from utils import (
-    MainWindow_Reward,
-    MainWindow_Tot_Reward,
-    create_video_from_images,
-    load_dataset_for_carla,
-)
+from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
+                   create_video_from_images, load_dataset_for_carla)
 
 
 def evaluate(
@@ -37,6 +33,7 @@ def evaluate(
 ):
     episode_returns = []
     distance = None
+    info = None
     for n_episode in range(n_episodes):
         obs = env.reset()
         window_tot_reward.reset_tot_reward()
@@ -51,6 +48,7 @@ def evaluate(
             with torch.no_grad():
                 with utils.eval_mode(agent):
                     action = agent.sample_action(obs)
+                    action = clip_action(action,env.action_space.spaces)
                 #         else:
                 # with utils.eval_mode(agent):
                 # action = agent.sample_action(obs)
@@ -78,7 +76,7 @@ def evaluate(
                 window_reward.update_plot_data(episode_step, -distance)
                 app1.processEvents()
 
-                window_tot_reward.update_labels(env.episode, episode_return, action)
+                window_tot_reward.update_labels(env.episode, episode_return, action,info["#WP"])
                 app2.processEvents()
                 # log in tensorboard 15th step
                 if algorithm == "sgsac":
@@ -102,11 +100,13 @@ def evaluate(
             L.log(f"eval/episode", n_episode, step)
             L.log(f"eval/episode_return", episode_return, step)
             L.log("eval/distance", distance, step)
+            L.log("eval/number_wp",  info["#WP"],step)
             L.dump(step)
         episode_returns.append(episode_return)
 
         args.writer_tensorboard.add_scalar("Eval/distance", distance, step)
         args.writer_tensorboard.add_scalar("Eval/return", episode_return, step)
+        args.writer_tensorboard.add_scalar("Eval/waypoints", info["#WP"], step)
 
 
 def main(
@@ -216,7 +216,7 @@ def main(
 
     # Create replay buffer
     replay_buffer = utils.Replay_Buffer_carla(
-        capacity=args.capacity, batch_size=args.batch_size, device=args.device
+        capacity=args.capacity, batch_size=args.batch_size, device=args.device,state_shape=env.observation_space.spaces
     )
 
     print("Observations:", env.observation_space.shape)
@@ -252,6 +252,8 @@ def main(
 
     # Start training
     steps_per_episode = 0
+    
+    info=None
     for train_step in range(0, args.train_steps + 1):
         # while n_episode < args.n_episodes + 1:
         # EVALUATE:
@@ -266,6 +268,7 @@ def main(
                 )
                 L.log("train/distance", distance, train_step - 1)
                 L.log("train/return", episode_return, train_step - 1)
+                L.log("train/number_wp", info["#WP"], train_step - 1)
 
                 L.dump(train_step - 1)
 
@@ -280,7 +283,7 @@ def main(
                 args.writer_tensorboard.add_scalar(
                     "Train/return", episode_return, train_step - 1
                 )
-
+                args.writer_tensorboard.add_scalar("Train/waypoints", info["#WP"], train_step-1)
                 # Save agent periodically
                 if n_episode % args.save_freq == 0:
                     torch.save(
@@ -341,14 +344,13 @@ def main(
         # Sample action for data collection
         if train_step < args.init_steps:
             action = env.action_space.sample()
-            # a = np.zeros(2)
-            # a[0] = np.clip(action[0], 0, 1)
-            # a[1] = np.clip(action[1], -0.3, 0.3)
-            action = np.concatenate((action[0], action[1]))
+            action = clip_action(action,env.action_space.spaces)
+
         else:
             # sgqn
             with utils.eval_mode(agent):
                 action = agent.sample_action(obs)
+                action = clip_action(action,env.action_space.spaces)
                 # a = np.zeros(2)
                 # a[0] = np.clip(action[0], 0, 1)
                 # a[1] = np.clip(action[1], -0.3, 0.3)
@@ -385,6 +387,8 @@ def main(
 
             cum_reward += reward
             distance = info["distance"]
+            if done:
+                break
 
             # if done:
             #     if info["goal"] is True:
@@ -404,7 +408,7 @@ def main(
         window_reward.update_plot_data(train_step, -distance)
         app1.processEvents()
 
-        window_tot_reward.update_labels(n_episode, episode_return, action)
+        window_tot_reward.update_labels(n_episode, episode_return, action,info["#WP"])
         app2.processEvents()
 
         obs = next_obs
@@ -412,6 +416,19 @@ def main(
     print("Completed training for", work_dir)
     return evaluated_episodes
 
+
+def clip_action(action,env_action_spaces):
+    highs,lows = [],[]
+    for box_space in env_action_spaces:
+        highs.append(box_space.high)
+        lows.append(box_space.low)
+        
+    a = np.zeros(len(env_action_spaces))
+    for i,_ in enumerate(a):
+        a[i] = np.clip(action[i], lows[i],highs[i])
+    
+    return a#np.concatenate([elem for elem in a ])
+    
 
 if __name__ == "__main__":
     from tensorboard import program
@@ -448,8 +465,8 @@ if __name__ == "__main__":
             + 1
         )
 
-    folder = 10379
-    episode = 4000
+    folder = 10146
+    episode = 10400
     load_model = (
         f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",
         episode,
