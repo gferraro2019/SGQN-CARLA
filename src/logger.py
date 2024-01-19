@@ -9,10 +9,11 @@ FORMAT_CONFIG = {
     "rl": {
         "train": [
             ("episode", "E", "int"),
-            ("step", "S", "int"),
-            ("steps_per_episode", "D", "int"),
+            ("step", "TS", "int"),
+            ("steps_per_episode", "Steps", "int"),
             ("return", "R", "float"),
             ("distance", "d", "float"),
+            ("number_wp","WP","int"),
             ("actor_loss", "ALOSS", "float"),
             ("alpha_loss", "alphaLOSS", "float"),
             ("alpha_value", "alphaValue", "float"),
@@ -26,8 +27,9 @@ FORMAT_CONFIG = {
         "eval": [
             ("episode", "E", "int"),
             ("step", "S", "int"),
-            ("episode_reward", "ER", "float"),
+            ("episode_return", "ER", "float"),
             ("distance", "d", "float"),
+            ("number_wp","WP","int"),
             ("episode_reward_test_env_color_hard", "ERTESTCOLOR", "float"),
             ("episode_reward_test_env_video_easy", "ERTESTVIDEASY", "float"),
             ("episode_reward_test_env_video_hard", "ERTESTVIDHARD", "float"),
