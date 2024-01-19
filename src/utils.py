@@ -91,13 +91,22 @@ def prefill_memory(obses, capacity, obs_shape):
     return obses
 
 
+import pickle
 import random
 
 import numpy as np
 import torch
-
 # from carla_dqn import device
 from torch.utils.data import IterableDataset
+
+
+def load_replay_buffer(filename="replay_buffer"):
+    print("saving replay buffer...")
+    file = open(filename,"rb")
+    replay_buffer = pickle.load(file)
+    file.close()
+    print("Done")
+    return replay_buffer
 
 
 class Replay_Buffer_carla:
@@ -119,6 +128,7 @@ class Replay_Buffer_carla:
         self.next_states_img = torch.empty(0, dtype=torch.float32).to(self.device)
         self.next_states = torch.empty(0, dtype=torch.float32).to(self.device)
         self.dones = torch.empty(0, dtype=torch.bool).to(self.device)
+        self.state_shape =state_shape
 
         self.capacity = capacity
         self.idx = 0
@@ -146,6 +156,15 @@ class Replay_Buffer_carla:
 
         return t.unsqueeze(0).to(self.device)
 
+    def save(self,filename="replay_buffer"):
+        print("saving replay buffer...")
+        file = open(filename,"wb")
+        pickle.dump(self,file,4)
+        file.close()
+        print("Done")
+    
+
+
     def add(self, observation):
         if len(self) < self.capacity:
             # self.content.append(observation)
@@ -162,7 +181,7 @@ class Replay_Buffer_carla:
             self.states = torch.cat(
                 [
                     self.states,
-                    torch.tensor(observation[0][1][-9:], dtype=torch.float32)
+                    torch.tensor(observation[0][1][-self.state_shape[1].shape[0]:], dtype=torch.float32)
                     .unsqueeze(0)
                     .to(self.device),
                 ],
@@ -198,7 +217,7 @@ class Replay_Buffer_carla:
             self.next_states = torch.cat(
                 [
                     self.next_states,
-                    torch.tensor(observation[3][1][-9:], dtype=torch.float32)
+                    torch.tensor(observation[3][1][-self.state_shape[1].shape[0]:], dtype=torch.float32)
                     .unsqueeze(0)
                     .to(self.device),
                 ],
@@ -223,7 +242,7 @@ class Replay_Buffer_carla:
             )
 
             self.states[self.idx] = (
-                torch.tensor(observation[0][1][-9:], dtype=torch.float32)
+                torch.tensor(observation[0][1][-self.state_shape[1].shape[0]:], dtype=torch.float32)
                 .unsqueeze(0)
                 .to(self.device)
             )
@@ -247,7 +266,7 @@ class Replay_Buffer_carla:
             )
 
             self.next_states[self.idx] = (
-                torch.tensor(observation[3][1][-9:], dtype=torch.float32)
+                torch.tensor(observation[3][1][-self.state_shape[1].shape[0]:], dtype=torch.float32)
                 .unsqueeze(0)
                 .to(self.device)
             )
@@ -750,6 +769,7 @@ class MainWindow_Tot_Reward(QMainWindow):
         self.tot_reward = 0
         self.action = [0, 0]
         self.frame = 0
+        self.n_wp =0
         self.action_repeat = action_repeat
 
         self.setWindowTitle("My App")
@@ -815,6 +835,18 @@ class MainWindow_Tot_Reward(QMainWindow):
         font.setPointSize(30)
         self.label10.setFont(font)
         self.label10.setAlignment(Qt.AlignTop | Qt.AlignRight)
+        
+        label11 = QLabel("#WP:")
+        font = label11.font()
+        font.setPointSize(20)
+        label11.setFont(font)
+        label11.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+
+        self.label12 = QLabel(str(self.n_wp))
+        font = self.label12.font()
+        font.setPointSize(30)
+        self.label12.setFont(font)
+        self.label12.setAlignment(Qt.AlignTop | Qt.AlignRight)
 
         layout.addWidget(label3)  # episode
         layout.addWidget(self.label4)
@@ -822,6 +854,8 @@ class MainWindow_Tot_Reward(QMainWindow):
         layout.addWidget(self.label10)
         layout.addWidget(label1)  # tot reward
         layout.addWidget(self.label2)
+        layout.addWidget(label11)  # WP
+        layout.addWidget(self.label12)
         layout.addWidget(label5)  # throttle
         layout.addWidget(self.label6)
         layout.addWidget(label7)  # steer
@@ -830,10 +864,11 @@ class MainWindow_Tot_Reward(QMainWindow):
         widget.setLayout(layout)
         self.setCentralWidget(widget)
 
-    def update_labels(self, n_episode, cum_reward, action):
+    def update_labels(self, n_episode, cum_reward, action,n_wp):
         # self.tot_reward += reward
         self.action = action
         self.frame += 1
+        self.n_wp = n_wp
         # self.label2.setText(str(self.tot_reward))
         # self.label2.setText("{:10.3f}".format(self.tot_reward))
         self.label2.setText("{:10.3f}".format(cum_reward))
@@ -841,12 +876,17 @@ class MainWindow_Tot_Reward(QMainWindow):
         self.label6.setText("{:1.3f}".format(self.action[0]))
         self.label8.setText("{:1.3f}".format(self.action[1]))
         self.label10.setText(str(self.frame * self.action_repeat))
+        self.label12.setText(str(self.n_wp))
 
     def reset_tot_reward(self):
         self.tot_reward = 0
         self.action = [0, 0]
         self.frame = 0
+        self.n_wp = 0
 
+
+#avoid_list = [289,291,292,294,295,297,298,300,301,303,304,306,308,309,311,312,315,316,318,320,321,323,325,326,328,330,331,333,335,336,338,340,342,343,345,347,348,350,352,354,356,358,359,361,363,365,367,369,371,373,375,377,380,382,384,386,388,391,393,395,398,400,402,405,407,410,412,415,417,420,422,425,428,431,432,435,438,440,443,446,449,453,455,458,462,465,468,471,474,478,481,484,487,491,494,497,500,504,507,510,513,516,520,523,526,529,532,535,539,542,545,548,551,555,558,561,564,567,571,573,576,579,582,584,587,590,593,596,599,602,605,608,611,614,617,620,629,632,636,639,642,645,648,650,653,656,659,662,664,667,670,672,675,678,680,683,685,688,690,693,696,698,701]
+avoid_list = list(range(135,167+1,1)) + list(range(0,30+1,1)) + list(range(746,755+1,1)) + list(range(876,920+1,1)) + list(range(131,136+1,1)) + list(range(118,130+1,1)) + list(range(78,104+1,1)) 
 
 import os
 
