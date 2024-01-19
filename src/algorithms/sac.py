@@ -58,9 +58,7 @@ class SAC(object):
             critic_encoder,
             action_shape,
             args.hidden_dim,
-            state_dim=int(obs_shape[1][0] / 3)
-            * obs_shape[0][0],  # /3 because RGB channels
-        ).cuda()
+            state_dim=int(obs_shape[0][0] / 3)* obs_shape[1][0]).cuda()  # /3 because RGB channels
         self.critic_target = deepcopy(self.critic)
 
         self.log_alpha = torch.tensor(np.log(args.init_temperature)).cuda()
