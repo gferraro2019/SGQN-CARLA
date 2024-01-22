@@ -465,13 +465,13 @@ if __name__ == "__main__":
             + 1
         )
 
-    folder = 10146
-    episode = 10400
+    folder = 10329
+    episode = 90
     load_model = (
         f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",
         episode,
     )
-    load_model = None
+    #load_model = None
     # try:
     evaluated_episodes = main(args, load_model)
 

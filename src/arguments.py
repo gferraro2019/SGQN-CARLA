@@ -10,8 +10,8 @@ def parse_args():
     parser.add_argument("--domain_name", default="carla")
     parser.add_argument("--task_name", default="drive")
     parser.add_argument("--frame_stack", default=3, type=int)
-    parser.add_argument("--action_repeat", default=5, type=int)
-    parser.add_argument("--episode_length", default=500, type=int)
+    parser.add_argument("--action_repeat", default=1, type=int)
+    parser.add_argument("--episode_length", default=30000, type=int)
     parser.add_argument("--eval_mode", default="color_easy", type=str)
     parser.add_argument("--capacity", default=100_000, type=str)
     parser.add_argument("--n_episodes", default=10_000, type=int)
@@ -80,7 +80,7 @@ def parse_args():
     parser.add_argument("--consistency", default=1, type=int)
 
     # eval
-    parser.add_argument("--save_freq", default="50", type=str)
+    parser.add_argument("--save_freq", default="100", type=str)
     parser.add_argument("--eval_freq", default="100", type=str)
     parser.add_argument("--eval_episodes", default=2, type=int)
     parser.add_argument("--distracting_cs_intensity", default=0.0, type=float)
