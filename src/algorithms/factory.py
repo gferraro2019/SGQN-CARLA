@@ -19,5 +19,5 @@ algorithm = {
 }
 
 
-def make_agent(obs_shape, action_shape, args):
-    return algorithm[args.algorithm](obs_shape, action_shape, args)
+def make_agent(obs_shape, action_shape,env_action_spaces, args):
+    return algorithm[args.algorithm](obs_shape, action_shape,env_action_spaces, args)

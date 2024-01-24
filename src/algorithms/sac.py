@@ -21,7 +21,7 @@ class FeaturesHook:
 
 
 class SAC(object):
-    def __init__(self, obs_shape, action_shape, args):
+    def __init__(self, obs_shape, action_shape,env_action_spaces, args):
         self.discount = args.discount
         self.critic_tau = args.critic_tau
         self.encoder_tau = args.encoder_tau
@@ -52,6 +52,8 @@ class SAC(object):
             args.hidden_dim,
             args.actor_log_std_min,
             args.actor_log_std_max,
+            env_action_spaces
+            
         ).cuda()
 
         self.critic = m.CriticState(
