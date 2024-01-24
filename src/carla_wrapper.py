@@ -61,6 +61,7 @@ class CarlaEnv(gym.Env):
         autopilot,
         unload_map_layer=None,
         max_episode_steps=1000,
+        total_number_waypoint = 500,
         lower_limit_return_=-600,
         visualize_target=False,
     ):
@@ -96,24 +97,22 @@ class CarlaEnv(gym.Env):
         self.map_name = map_name
         self.autopilot = autopilot
         self.actor_list = []
-        self.count = 0
+        
         print(max_episode_steps)
         self._max_episode_steps = int(max_episode_steps)
+        self.total_number_waypoint = total_number_waypoint
         self.current_step = 0
 
+        # used in reward function
         self.previous_steer = 0
         self.previous_distance = 0
-        self.wp_is_reached =0
+        self.wp_is_reached = 0
 
         self.visualize_target = visualize_target
 
         # to end the task when the lower limit is reached
         self.lower_limit_return_ = lower_limit_return_
-        self.return_ = 0
-
-
-        
-
+        self.return_ = 0    
 
         # initialize renderingAttributeError: module 'tensorflow' has no attribute 'contrib'
         if self.render_display:
@@ -126,11 +125,11 @@ class CarlaEnv(gym.Env):
 
         # initialize client with timeout
         self.client = carla.Client("localhost", carla_port)
-        self.client.set_timeout(4.0)
+        self.client.set_timeout(5.0)
 
         # initialize world and map
         if self.map_name is not None:
-            self.world = self.client.load_world_world(self.map_name)
+            self.world = self.client.load_world(self.map_name)
         else:
             self.world = self.client.get_world()
 
@@ -157,63 +156,97 @@ class CarlaEnv(gym.Env):
                     if layer not in ["Walls,", "Ground", "Streetlights", "All"]:
                         self.world.unload_map_layer(value)
 
-        # remove old vehicles and sensors (in case they survived)
         self.world.tick()
-        actor_list = self.world.get_actors()
-        for vehicle in actor_list.filter("*vehicle*"):
-            print("Warning: removing old vehicle")
-            vehicle.destroy()
-        for sensor in actor_list.filter("*sensor*"):
-            print("Warning: removing old sensor")
-            sensor.destroy()
-
-
-        # Fix a Waypoint
-        self.waypoint = None
-        self.max_distance_from_waypoint = 2
-        # self._fix_waypoint()
-        # self.waypoints = self.generate_waypoint_from_lane(2,8,False)
-        # print(len(self.waypoints))
-        self.next_waypoint=1
-        self.counter_step_zero_speed=0
-        
-        
-        self.waypoints = self.generate_waypoint_from_lane(2,1,False,avoid_list)
-        self.total_distance = self.compute_remaining_distance()
-        self.remaining_distance = self.compute_remaining_distance(1,-1)
-        print("number of waypoints: ",len(self.waypoints))
 
         # create vehicle
         self.vehicle = None
         self.vehicles_list = []
-        self._reset_vehicle(from_fixed_point=True)
-        self.actor_list.append(self.vehicle)
+        
+        # Fix a Waypoint
+        self.waypoint = None
+        self.counter_waypoint = 0
+        self.counter_step_zero_speed = 0
+        self.max_distance_from_waypoint = 2
 
+        # weather
+        self.weather = Weather(self.world, self.changing_weather_speed)
+
+        self.observation_space = None
+
+        if self.observations_type == "sgqn_pixel":
+            obs = np.zeros((3, 84, 84))
+            state = np.zeros(11, dtype=np.float32)
+            self.observation_space = spaces.Tuple(
+                (
+                    spaces.Box(0, 1, shape=obs.shape, dtype=np.float32),
+                    spaces.Box(-np.inf, np.inf, shape=state.shape, dtype="float32"),
+                )
+            )
+        else:
+            # get initial observation
+            if self.observations_type == "state":
+                obs = self._get_state_obs()
+
+            else:
+                obs = np.zeros((3, 84, 84))
+
+            self.obs_dim = obs.shape
+            self.observation_space = spaces.Box(
+                -np.inf, np.inf, shape=self.obs_dim, dtype="float32"
+            )
+
+        # gym environment specific variables
+        self.action_space = spaces.Tuple(
+            (
+                spaces.Box(0, 1.0, shape=(1,), dtype="float32"),
+                spaces.Box(-0.3, 0.3, shape=(1,), dtype="float32"),
+            )
+        )
+
+        self.bike = None
+        self.bonus = 0
+
+    def spawn_sensors(self):
+        
+        # collision detection
+        self.collision = False
+        sensor_blueprint = self.world.get_blueprint_library().find(
+            "sensor.other.collision"
+        )
+        self.collision_sensor = self.world.spawn_actor(
+            sensor_blueprint, carla.Transform(), attach_to=self.vehicle
+        )
+        self.collision_sensor.listen(lambda event: self._on_collision(event))
+        
+        self.actor_list.append(self.collision_sensor)
+
+        # lane invasion detector
+        self.lane_invasion = False
+        sensor_blueprint = self.world.get_blueprint_library().find(
+            "sensor.other.lane_invasion"
+        )
+        self.lane_invasion_sensor = self.world.spawn_actor(
+            sensor_blueprint, carla.Transform(), attach_to=self.vehicle
+        )
+        self.lane_invasion_sensor.listen(lambda event: self._on_lane_invasion(event))
+        self.n_lane_invasions = 0
+        self.actor_list.append(self.lane_invasion_sensor)
+        
+    
+    def spawn_cameras(self):
         # initialize blueprint library
         blueprint_library = self.world.get_blueprint_library()
 
         # spawn camera for rendering
         if self.render_display:
+            location = carla.Location(x=1.6, z=1.7)
             self.camera_display = self.world.spawn_actor(
                 blueprint_library.find("sensor.camera.rgb"),
-                carla.Transform(
-                    carla.Location(x=25,y=100, z=150), carla.Rotation(pitch=-90)
+                carla.Transform(location, carla.Rotation(yaw=0.0)
                 ),
                 attach_to=self.vehicle,
             )
             self.actor_list.append(self.camera_display)
-            
-            # bp = blueprint_library.find("sensor.camera.rgb")
-            # bp.set_attribute("image_size_x", str(800))
-            # bp.set_attribute("image_size_y", str(600))
-            # bp.set_attribute("fov", str(84))
-            # location = carla.Location(x=-5.5, z=2.8)
-            # self.camera_display = self.world.spawn_actor(
-            #     bp,
-            #     carla.Transform(location, carla.Rotation(yaw=0.0)),
-            #     attach_to=self.vehicle,
-            # )
-            # self.actor_list.append(self.camera_display)
 
         # spawn camera for pixel observations
         if "pixel" in self.observations_type:
@@ -242,154 +275,46 @@ class CarlaEnv(gym.Env):
             self.sync_mode = CarlaSyncMode(self.world, fps=20)
         else:
             raise ValueError("Unknown observation_type. Choose between: state, pixel")
-
-        # weather
-        self.weather = Weather(self.world, self.changing_weather_speed)
-
-        # collision detection
-        self.collision = False
-        sensor_blueprint = self.world.get_blueprint_library().find(
-            "sensor.other.collision"
-        )
-        self.collision_sensor = self.world.spawn_actor(
-            sensor_blueprint, carla.Transform(), attach_to=self.vehicle
-        )
-        self.collision_sensor.listen(lambda event: self._on_collision(event))
-
-        # lane invasion detector
-        self.lane_invasion = False
-        sensor_blueprint = self.world.get_blueprint_library().find(
-            "sensor.other.lane_invasion"
-        )
-        self.lane_invasion_sensor = self.world.spawn_actor(
-            sensor_blueprint, carla.Transform(), attach_to=self.vehicle
-        )
-        self.lane_invasion_sensor.listen(lambda event: self._on_lane_invasion(event))
-        self.n_lane_invasions = 0
-
-        #         # initialize autopilot
-        #         self.agent = RoamingAgent(self.vehicle)
-
-        self.observation_space = None
-
-        if self.observations_type == "sgqn_pixel":
-            obs = np.zeros((3, 84, 84))
-            state = np.zeros(12, dtype=np.float32)
-            self.observation_space = spaces.Tuple(
-                (
-                    spaces.Box(0, 255, shape=obs.shape, dtype=np.uint8),
-                    spaces.Box(-np.inf, np.inf, shape=state.shape, dtype="float32"),
-                )
-            )
-        else:
-            # get initial observation
-            if self.observations_type == "state":
-                obs = self._get_state_obs()
-
-            else:
-                obs = np.zeros((3, 84, 84))
-
-            self.obs_dim = obs.shape
-            self.observation_space = spaces.Box(
-                -np.inf, np.inf, shape=self.obs_dim, dtype="float32"
-            )
-
-        # gym environment specific variables
-        self.action_space = spaces.Tuple(
-            (
-                spaces.Box(0, 1.0, shape=(1,), dtype="float32"),
-                spaces.Box(-0.3, 0.3, shape=(1,), dtype="float32"),
-            )
-        )
-
-            
-
-        self.bike = None
-
     
-    def compute_remaining_distance(self,a=0,b=-1):
-        remaining_distance = 0
-        for i,e in enumerate(self.waypoints):
-            
-            if i+1 <len(self.waypoints[a:b]):
+    def destroy_prevoius_actors(self):
+        if len(self.actor_list)>0:
+            # # remove old vehicles and sensors (in case they survived)
+            # self.actor_list = self.world.get_actors()
+            # for vehicle in self.actor_list.filter("*vehicle*"):
+            #     print("Warning: removing old vehicle")
+            #     vehicle.destroy()
+            # for sensor in self.actor_list.filter("*sensor*"):
+            #     print("Warning: removing old sensor")
+            #     sensor.destroy()
+            for actor in self.actor_list:
+                actor.destroy()
                 
-                remaining_distance += np.sqrt(
-                   (self.waypoints[i][0] - self.waypoints[i+1][0]) ** 2
-                +  (self.waypoints[i][1] - self.waypoints[i+1][1]) ** 2
-            )
-        return remaining_distance
-    
-    def _fix_waypoint(self):
-        """This function set the global waypoint and return a trasform object of a
-        waypoint placed always 5 m behind the first.
-
-        Returns:
-            transform: the trasfirm object of antecedent waypoint to the global one
-        """
-        # self.waypoint = carla.Transform()
-        # self.waypoint.location.x = 110
-        # self.waypoint.location.y = -15
-        # self.waypoint.location.z = 0
-        # self.waypoint.rotation.pitch = 0
-        # self.waypoint.rotation.yaw = 270
-        # self.waypoint.rotation.roll = 0
-
-        # transform = carla.Transform()
-        # transform.location.x = 110
-        # transform.location.y = -10
-        # transform.location.z = 0
-        # transform.rotation.pitch = 0
-        # transform.rotation.yaw = 270
-        # transform.rotation.roll = 0
-        
-        self.waypoint = carla.Transform()
-        self.waypoint.location.x = self.waypoints[1][0]
-        self.waypoint.location.y = self.waypoints[1][1]
-        self.waypoint.location.z = 0
-        self.waypoint.rotation.pitch = 0
-        self.waypoint.rotation.yaw = 90
-        self.waypoint.rotation.roll = 0
-
-        transform = carla.Transform()
-        transform.location.x = self.waypoints[0][0]
-        transform.location.y = self.waypoints[0][1]
-        transform.location.z = 0
-        transform.rotation.pitch = 0
-        transform.rotation.yaw = 90
-        transform.rotation.roll = 0
-
-        # self.max_distance_from_waypoint = abs(
-        #     self.waypoint.location.y - transform.location.y
-        # )
-        return transform
-
-    def reset(self):
-        self.lane_invasion = False
-        self.collision = False
-        self.next_waypoint = 1
-        self.previous_distance = 0
-        self.wp_is_reached =False
-        
-        # shift list waypoint to start in a new poistion
-        new_start_position = np.random.randint(0,len(self.waypoints))
-        self.waypoints = np.roll(self.waypoints,new_start_position)
-        print(f"waypoint have been shifted at {new_start_position}")
-
-        self.total_distance = self.compute_remaining_distance()
-        self.remaining_distance = self.compute_remaining_distance(1,-1)
-        # to avoid influnces from the former episode (angular momentun preserved)
-        if self.vehicle is not None:
-            self.vehicle.destroy()
             self.vehicle = None
+            self.actor_list.clear()
+            assert len(self.actor_list)==0 , f"list still contains something {self.actor_list}"
+    
+    def reset(self):        
+        # to avoid influnces from the former episode (angular momentun preserved)
+        self.destroy_prevoius_actors()
 
-        self._reset_vehicle(from_fixed_point=True)
+        self._reset_vehicle()
         self.world.tick()
 
         self._reset_other_vehicles()
         self.world.tick()
 
-        self.count = 0
+        self.spawn_cameras()
+        self.spawn_sensors()
+
+        self.bonus = 0
+        self.previous_distance = 0
         self.collision = False
+        self.lane_invasion = False
+        
+        self.waypoint = self.map.get_waypoint(self.vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving ))
+        self.wp_is_reached =False
+        self.counter_waypoint=0
+        self.counter_step_zero_speed=0
 
         if self.bike is not None:
             self.bike.destroy()
@@ -404,8 +329,8 @@ class CarlaEnv(gym.Env):
             ]
             bike_blueprint = bikes_blueprints[0]
             bike_blueprint.set_attribute("color", "0,255,0")
-            transform.location.y = self.waypoint.location.y
-            transform.location.x = self.waypoint.location.x
+            transform.location.y = self.waypoint.transform.location.y
+            transform.location.x = self.waypoint.transform.location.x
             transform.location.z = 0
 
             transform.rotation.yaw = -180
@@ -418,9 +343,7 @@ class CarlaEnv(gym.Env):
                 f"distance = { np.sqrt((transform.location.x - self.vehicle.get_transform().location.x)**2+(transform.location.y - self.vehicle.get_transform().location.y)**2)}"
             )
 
-        print(
-            f"distance = { np.sqrt((self.waypoints[self.next_waypoint][0] - self.vehicle.get_transform().location.x)**2+(self.waypoints[self.next_waypoint][1] - self.vehicle.get_transform().location.y)**2)}"
-        )
+        print(f"distance = { np.sqrt((self.waypoint.transform.location.x - self.vehicle.get_transform().location.x)**2 + (self.waypoint.transform.location.y - self.vehicle.get_transform().location.y)**2)}")
 
         # self._fix_waypoint()  # second time for placing the global waypoint
 
@@ -442,7 +365,7 @@ class CarlaEnv(gym.Env):
             [(x.transform.location.x, x.transform.location.y) for x in wp_list]
         )
 
-    def _reset_vehicle(self, from_fixed_point=False):
+    def _reset_vehicle(self):
         # choose random spawn point
         init_transforms = self.world.get_map().get_spawn_points()
         vehicle_init_transform = random.choice(init_transforms)
@@ -461,15 +384,14 @@ class CarlaEnv(gym.Env):
 
                 vehicle_blueprint.set_attribute("color", color)
 
-        # spawn vehicle
-        self.vehicle = self.world.spawn_actor(vehicle_blueprint, vehicle_init_transform)
+            # spawn vehicle
+            self.vehicle = self.world.spawn_actor(vehicle_blueprint, vehicle_init_transform)
+            self.actor_list.append(self.vehicle)
 
-        if from_fixed_point is True:
-            # set the car always at the same distance from the waypoint
-            self.vehicle.set_transform(self._fix_waypoint())
             
 
     def _reset_other_vehicles(self):
+        #TODO add machines to actor_list
         if not self.traffic:
             return
 
@@ -587,12 +509,6 @@ class CarlaEnv(gym.Env):
                 
         return lane_reduced
 
-    def plot_waypoints(self):
-        plt.scatter(self.waypoints[:,0],self.waypoints[:,1]) # al WPs
-        plt.scatter(self.waypoints[self.next_waypoint,0],self.waypoints[self.next_waypoint,1])# next WP
-        plt.scatter(self.waypoints[0,0],self.waypoints[0,1])# first WP
-        plt.scatter(self.vehicle.get_transform().location.x,self.vehicle.get_transform().location.y) # car position
-        plt.show()
 
     def getLanes(self, lane_idx,plot=False,density_wp=8):
         """Plot waypoints in the map according to the lane id
@@ -743,7 +659,7 @@ class CarlaEnv(gym.Env):
         if self.render_display:
             draw_image(self.render_display, display_image)
             self.render_display.blit(
-                self.font.render("Frame: %d" % self.count, True, (255, 255, 255)),
+                self.font.render("Frame: %d" % self.current_step, True, (255, 255, 255)),
                 (8, 10),
             )
             self.render_display.blit(
@@ -772,12 +688,11 @@ class CarlaEnv(gym.Env):
         else:
             # for sgqn_carla add distances to the state
             next_obs = self._get_pixel_obs(vision_image)
-            next_obs = next_obs.reshape(3, 84, 84).astype(np.uint8)
+            next_obs = next_obs.reshape(3, 84, 84)
             state = self._get_state_obs()
             next_obs = (next_obs, state)
 
         # increase frame counter
-        self.count += 1
         self.current_step += 1
 
         if self.current_step >= self._max_episode_steps or float(self.return_) <= float(
@@ -795,8 +710,8 @@ class CarlaEnv(gym.Env):
         # dx = np.sqrt(location.x - nearest_wp.transform.location.x) ** 2
         # dy = np.sqrt(location.y - nearest_wp.transform.location.y) ** 2
 
-        dx = np.sqrt((location.x - self.waypoint.location.x) ** 2)
-        dy = np.sqrt((location.y - self.waypoint.location.y) ** 2)
+        dx = np.sqrt((location.x - self.waypoint.transform.location.x) ** 2)
+        dy = np.sqrt((location.y - self.waypoint.transform.location.y) ** 2)
 
         return dx, dy
 
@@ -804,7 +719,7 @@ class CarlaEnv(gym.Env):
         bgra = np.array(vision_image.raw_data).reshape(84, 84, 4)
         bgr = bgra[:, :, :3]
         rgb = np.flip(bgr, axis=2)
-        return rgb
+        return rgb/255
 
     def _get_state_obs(self):
         """This funciton return a state of 9 elements:
@@ -824,18 +739,18 @@ class CarlaEnv(gym.Env):
         transform = self.vehicle.get_transform()
         location = transform.location
         rotation = transform.rotation
-        dx_pos = np.abs(location.x - self.waypoint.location.x)
-        dy_pos = np.abs(location.y - self.waypoint.location.y)
-        dz_pos = np.abs(location.z - self.waypoint.location.z)
-        delta_pitch = self.waypoint.rotation.pitch - rotation.pitch
-        delta_yaw = self.waypoint.rotation.yaw - rotation.yaw
-        delta_roll = self.waypoint.rotation.roll - rotation.roll
+        dx_pos = np.abs(location.x - self.waypoint.transform.location.x)
+        dy_pos = np.abs(location.y - self.waypoint.transform.location.y)
+        dz_pos = np.abs(location.z - self.waypoint.transform.location.z)
+        delta_pitch = self.waypoint.transform.rotation.pitch - rotation.pitch
+        delta_yaw = self.waypoint.transform.rotation.yaw - rotation.yaw
+        delta_roll = self.waypoint.transform.rotation.roll - rotation.roll
         acceleration = vector_to_scalar(self.vehicle.get_acceleration())
         angular_velocity = vector_to_scalar(self.vehicle.get_angular_velocity())
         velocity = vector_to_scalar(self.vehicle.get_velocity())
-        completed_percentage_wp = len(self.waypoints[-(self.next_waypoint):])/len(self.waypoints)
+        completed_wp = self.counter_waypoint/self.total_number_waypoint
         completed_percentage_frame = (self.current_step+1)/self._max_episode_steps
-        completed_percentage_distance = self.remaining_distance/self.total_distance
+        
         return np.array(
             [
                 round(dx_pos, 4),
@@ -847,61 +762,16 @@ class CarlaEnv(gym.Env):
                 round(acceleration, 4),
                 round(angular_velocity, 4),
                 round(velocity, 4),
-                round(completed_percentage_wp,4),
-                round(completed_percentage_frame,4),
-                round(completed_percentage_distance,4),
-                
+                round(completed_wp,4),
+                round(completed_percentage_frame,4),                
             ],
             dtype=np.float32,
         )
 
-    # def _get_state_obs(self):
-    #     transform = self.vehicle.get_transform()
-    #     location = transform.location
-    #     rotation = transform.rotation
-    #     x_pos = location.x
-    #     y_pos = location.y
-    #     z_pos = location.z
-    #     pitch = rotation.pitch
-    #     yaw = rotation.yaw
-    #     roll = rotation.roll
-    #     acceleration = vector_to_scalar(self.vehicle.get_acceleration())
-    #     angular_velocity = vector_to_scalar(self.vehicle.get_angular_velocity())
-    #     velocity = vector_to_scalar(self.vehicle.get_velocity())
-    #     return np.array(
-    #         [
-    #             x_pos,
-    #             y_pos,
-    #             z_pos,
-    #             pitch,
-    #             yaw,
-    #             roll,
-    #             acceleration,
-    #             angular_velocity,
-    #             velocity,
-    #         ],
-    #         dtype=np.float64,
-    #     )
-
-    # def _get_reward(self):
-    #     vehicle_location = self.vehicle.get_location()
-    #     follow_waypoint_reward = self._get_follow_waypoint_reward(vehicle_location)
-    #     done, collision_reward = self._get_collision_reward()
-    #     cost = self._get_cost()
-    #     total_reward = 100 * follow_waypoint_reward + 100 * collision_reward
-
-    #     info_dict = dict()
-    #     info_dict["follow_waypoint_reward"] = follow_waypoint_reward
-    #     info_dict["collision_reward"] = collision_reward
-    #     info_dict["cost"] = cost
-
-    #     return total_reward, done, info_dict
-
     def compute_alpha_between_lines(self,plot=False):
-        p0 = self.waypoints[self.next_waypoint-1]
-        p1 = self.waypoints[self.next_waypoint]
+        p0 = self.waypoint.previous(2)
+        p1 = self.waypoint.next(2)
         pcar = (self.vehicle.get_transform().location.x,self.vehicle.get_transform().location.y)
-        
         
         m0 = (p1[0]-p0[0])/(p1[1]-p0[1]+0.001) 
         m1 = (pcar[0]-p0[0])/(pcar[1]-p0[1]+0.001) 
@@ -924,19 +794,11 @@ class CarlaEnv(gym.Env):
         info_dict["looped"] = False
         goal, done, total_reward = False, False, 0
         vehicle_location = self.vehicle.get_location()
-
-        
-        # global_distance = len(self.waypoints[self.next_waypoint-1:])*np.sqrt(
-        #     (self.waypoints[0][0] - self.waypoints[1][0]) ** 2
-        #     +  (self.waypoints[0][1] - self.waypoints[1][1]) ** 2
-        # )
         
         distance = np.sqrt(
-            (vehicle_location.x - self.waypoints[self.next_waypoint][0]) ** 2
-            + (vehicle_location.y - self.waypoints[self.next_waypoint][1]) ** 2
+            (vehicle_location.x - self.waypoint.transform.location.x) ** 2
+            + (vehicle_location.y - self.waypoint.transform.location.y) ** 2
         )
-        
-        
         
         vehicle_velocity = self.vehicle.get_velocity()
         speed = round(
@@ -945,140 +807,59 @@ class CarlaEnv(gym.Env):
         
         if speed <=0:
             self.counter_step_zero_speed+=1
+            # total_reward = -0.01
         else:
             self.counter_step_zero_speed =0
         
-        #diff_angle = abs(steer - self.previous_steer)
-        # if throttle>0:
-        #     total_reward = (speed+throttle-1e-3)/(abs(steer+1e-3)*1e3) 
-        # else:
-        
-        # if distance < self.previous_distance:
-        #     total_reward = 1
-        # else:
-        #     total_reward = -1
-            
-        # self.previous_distance = distance
-        
-        
         #the best till now
-        # total_reward = ((self.next_waypoint-1)/(self.current_step+1))*self._max_episode_steps - 1
+        # total_reward = ((self.counter_waypoint-1)/(self.current_step+1))*self._max_episode_steps - 0
         
-            
-        #total_reward = (-(global_distance-distance) - 0.5  - self.compute_alpha_between_lines())/abs(speed + 1e-5) 
-        #term_angle = 2**1/(self.compute_alpha_between_lines()+1e-5)
-        #term_speed = abs(speed + 1e-5)
+        #total_reward = (self.counter_waypoint/(self.current_step+1))*self._max_episode_steps -1
+        #rew1 = (k*step/(steps))-1000
+        # total_reward = self.counter_waypoint - self.current_step/1000 - 0.7 + self.bonus
         
-        # if distance < self.previous_distance:
-        #     total_reward = 1#(758-(global_distance - distance)) * speed
-        # else:
-        #     total_reward = -1#(758-(global_distance + distance)) * speed
+        # total_reward += self.counter_waypoint*1000/self._max_episode_steps
         
-        # self.previous_steer = steer
+        
         if  self.wp_is_reached:
             self.previous_distance = distance    
             self.wp_is_reached = False
 
-        self.remaining_distance = self.remaining_distance + (distance-self.previous_distance)
-        
+        if distance < self.previous_distance:
+            total_reward = 1
+        else:
+            total_reward = -1
+
+
+        self.remaining_distance = self.total_number_waypoint - self.counter_waypoint
         self.previous_distance = distance    
         
         if distance <= 0.1:
             self.wp_is_reached = True
-            self.wp_is_reached= self.next_waypoint
-            total_reward = 1e3#1e4*self.next_waypoint
-            # done, collision_reward = True, 0
-        #     distance_from_previous_wp = np.sqrt(
-        #     (self.waypoints[self.next_waypoint][0] - self.waypoints[self.next_waypoint-1][0]) ** 2
-        #     + (self.waypoints[self.next_waypoint][1] - self.waypoints[self.next_waypoint-1][1]) ** 2 
-        # )
-            
-            # total_reward = distance_from_previous_wp + (self.max_distance_from_waypoint - distance_from_previous_wp)
+            # total_reward += 1e3#self.counter_waypoint
+            # self.bonus +=1
+
             #update waypoint
-            self.next_waypoint+=1
-            if self.next_waypoint +1 >= len(self.waypoints):
-                #total_reward += 1#1e4
+            self.counter_waypoint+=1
+            self.waypoint = self.waypoint.next(1.)[0]
+            if self.counter_waypoint +1 >= self.total_number_waypoint:
                 done = True
                 goal = True
         
+        # elif distance > 1 + self.previous_distance and distance < self.max_distance_from_waypoint:
+        #     total_reward = -1#-0.01 * distance
             
-        elif distance>1+self.previous_distance and distance < self.max_distance_from_waypoint:
-            total_reward = -100*distance
-            
-                
         elif distance >= self.max_distance_from_waypoint or self.counter_step_zero_speed == 300:
-            
             self.counter_step_zero_speed = 0
-            total_reward = -100*distance
-            # total_reward += -global_distance
-            
+            # total_reward = -1#-0.01 * distance
             done = True
-        
-        
-            
-
-        total_reward += -self.remaining_distance/(self.current_step+1)
-    
 
 
-        # #     self.waypoint = self.map.get_waypoint(
-        # #         self.vehicle.get_tranform().location,
-        # #         project_to_road=True,
-        # #         lane_type=carla.LaneType.Driving,
-        # #     )
-        # #     total_reward = 1
-        # diff_angle = abs(steer - self.previous_steer)
-        # if diff_angle > 0.3:
-        #     total_reward += -diff_angle
-        # else:
-        #     total_reward += 1-diff_angle
-
-        # self.previous_steer = steer
-
-        # # # cost = 0
-        # if self.lane_invasion or self.collision:
-        #     done = True
-        #     total_reward += -100
-        #     self.lane_invasion = False
-        #     self.collision = False
-
-        # # #     # self.lane_invasions = 0
-        # # #     if self.lane_invasion >= 3:
-        # # #         done = True
-        # # #         total_reward += -100  # self._max_episode_steps
-
-        # # # else:
-        # # #     total_reward += follow_waypoint_reward + collision_reward
-
-        # vehicle_velocity = self.vehicle.get_velocity()
-        # speed = round(
-        #     3.6 * np.linalg.norm(np.array([vehicle_velocity.x, vehicle_velocity.y])), 3
-        # )
-        # if speed < 10:
-        #     total_reward += -1
-        # else:
-        #     total_reward += 1
-
-        # if throttle > 0:
-        #     total_reward += throttle / 10
-        # # if speed == 0 and distance > 0:
-        # #     total_reward += -100
-
-        # info_dict["follow_waypoint_reward"] = follow_waypoint_reward
-        # info_dict["collision_reward"] = collision_reward
-        # info_dict["cost"] = cost
-        # info_dict["distance"] = distance
         info_dict["distance"] = self.remaining_distance
         info_dict["goal"] = goal
-        info_dict["#WP"] = self.next_waypoint-1
+        info_dict["#WP"] = self.counter_waypoint
 
-        # clip reward between -1 and 0
-        # if total_reward != 0:
-        # total_reward = sigmoid(total_reward - abs(steer)) - 0.5
-        # if goal:
-        #     total_reward += 1000
-
-        return total_reward/1e3, done, info_dict
+        return total_reward, done, info_dict
 
     def _get_follow_waypoint_reward(self, location):
         nearest_wp = self.map.get_waypoint(location, project_to_road=True)
