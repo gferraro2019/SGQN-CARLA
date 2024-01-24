@@ -48,7 +48,7 @@ def evaluate(
             with torch.no_grad():
                 with utils.eval_mode(agent):
                     action = agent.sample_action(obs)
-                    action = clip_action(action,env.action_space.spaces)
+                    #action = clip_action(action,env.action_space.spaces)
                 #         else:
                 # with utils.eval_mode(agent):
                 # action = agent.sample_action(obs)
@@ -228,7 +228,7 @@ def main(
     print("actions.shape:", shp_action)
 
     # Create the agent
-    agent = make_agent(obs_shape=shp_observation, action_shape=shp_action, args=args)
+    agent = make_agent(shp_observation, shp_action,env.action_space.spaces, args)
     # agent = simple_sac.SACAgent(state_dim=shp, action_dim=2)
 
     # load existing model to keep training it
@@ -344,13 +344,17 @@ def main(
         # Sample action for data collection
         if train_step < args.init_steps:
             action = env.action_space.sample()
-            action = clip_action(action,env.action_space.spaces)
+            action = np.array([action[0][0],action[1][0]])
+            
+            #action = clip_action(action,env.action_space.spaces)
 
         else:
             # sgqn
             with utils.eval_mode(agent):
                 action = agent.sample_action(obs)
-                action = clip_action(action,env.action_space.spaces)
+                #action = np.array([[action[0]],[action[1]]])
+                #action = (np.array(action[0]),np.array(action[1]))
+                #action = clip_action(action,env.action_space.spaces)
                 # a = np.zeros(2)
                 # a[0] = np.clip(action[0], 0, 1)
                 # a[1] = np.clip(action[1], -0.3, 0.3)
@@ -471,7 +475,7 @@ if __name__ == "__main__":
         f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",
         episode,
     )
-    #load_model = None
+    load_model = None
     # try:
     evaluated_episodes = main(args, load_model)
 
