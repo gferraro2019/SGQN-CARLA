@@ -123,7 +123,7 @@ class Replay_Buffer_carla:
         # self.content = []
         self.states_img = torch.empty(0, dtype=torch.float32).to(self.device)
         self.states = torch.empty(0, dtype=torch.float32).to(self.device)
-        self.actions = torch.empty(0, dtype=torch.int32).to(self.device)
+        self.actions = torch.empty(0, dtype=torch.float32).to(self.device)
         self.rewards = torch.empty(0, dtype=torch.float32).to(self.device)
         self.next_states_img = torch.empty(0, dtype=torch.float32).to(self.device)
         self.next_states = torch.empty(0, dtype=torch.float32).to(self.device)
@@ -248,7 +248,7 @@ class Replay_Buffer_carla:
             )
 
             self.actions[self.idx] = (
-                torch.tensor(observation[1], dtype=torch.int32)
+                torch.tensor(observation[1], dtype=torch.float32)
                 .unsqueeze(0)
                 .to(self.device)
             )
