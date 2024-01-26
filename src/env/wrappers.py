@@ -353,7 +353,8 @@ class VideoRecord_carla(gym.Wrapper):
         obs, reward, done, info = self.env.step(action)
         # if self.episode % self.n_episodes == 0:
         self.update_filename(self.paths[0])
-        self.save_image(self.filename, obs[0].reshape(84, 84, 3))
+        img = obs[0].reshape(84, 84, 3) * 255
+        self.save_image(self.filename, img.astype(np.uint8))
         if self.render_display is not False:
             self.update_filename(self.paths[1])
             pygame.image.save(self.render_display, self.filename)
