@@ -1,5 +1,6 @@
 import os
 import os.path as op
+import pickle
 import sys
 import time
 
@@ -17,7 +18,8 @@ from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla, VideoRecord_carla
 from logger import Logger
 from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
-                   create_video_from_images, load_dataset_for_carla)
+                   create_video_from_images, load_dataset_for_carla,
+                   load_replay_buffer)
 
 
 def evaluate(
@@ -214,11 +216,15 @@ def main(
         test_envs.append(test_env)
         test_envs_mode.append(args.eval_mode)
 
-    # Create replay buffer
-    replay_buffer = utils.Replay_Buffer_carla(
-        capacity=args.capacity, batch_size=args.batch_size, device=args.device,state_shape=env.observation_space.spaces
-    )
-
+    replay_buffer = None
+    if op.exists(args.replay_buffer_path):
+        replay_buffer = load_replay_buffer(args.replay_buffer_path)
+    else:
+        # Create replay buffer
+        replay_buffer = utils.Replay_Buffer_carla(
+            capacity=args.capacity, batch_size=args.batch_size, device=args.device,state_shape=env.observation_space.spaces
+        )
+    
     print("Observations:", env.observation_space.shape)
 
     shp_observation = (env.observation_space[0].shape, env.observation_space[1].shape)
@@ -469,15 +475,18 @@ if __name__ == "__main__":
             + 1
         )
 
-    folder = 10329
-    episode = 90
+    folder = 10410
+    episode = 100
     load_model = (
         f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",
         episode,
     )
-    load_model = None
+    # load_model = None
     # try:
+    args.replay_buffer_path = ""#"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/replay_buffer_10410"
+    
     evaluated_episodes = main(args, load_model)
+
 
     # create video from images
     save_path = os.path.join("output", str(args.seed), "video_records", "avi")
