@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument("--discount", default=0.99, type=float)
     parser.add_argument(
         "--init_steps",
-        default=1500,
+        default=2500,
         type=int,
         help="the number of initial steps to take before the agent will be update after each frame",
     )
