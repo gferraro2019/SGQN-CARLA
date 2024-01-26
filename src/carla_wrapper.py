@@ -64,6 +64,8 @@ class CarlaEnv(gym.Env):
         total_number_waypoint = 500,
         lower_limit_return_=-600,
         visualize_target=False,
+        trace_trajectories=True,
+        verbose=False
     ):
         """This function initialize the Carla enviroment.
 
@@ -96,6 +98,8 @@ class CarlaEnv(gym.Env):
         self.vehicle_color = vehicle_color
         self.map_name = map_name
         self.autopilot = autopilot
+        self.trace_trajectories = trace_trajectories
+        self.verbose = verbose
         self.actor_list = []
         
         print(max_episode_steps)
@@ -199,7 +203,7 @@ class CarlaEnv(gym.Env):
         self.action_space = spaces.Tuple(
             (
                 spaces.Box(0, 1.0, shape=(1,), dtype="float32"),
-                spaces.Box(-0.3, 0.3, shape=(1,), dtype="float32"),
+                spaces.Box(-1, 1, shape=(1,), dtype="float32"),
             )
         )
 
@@ -293,9 +297,24 @@ class CarlaEnv(gym.Env):
             self.actor_list.clear()
             assert len(self.actor_list)==0 , f"list still contains something {self.actor_list}"
     
+    def generate_list_waypoints(self,start_waypoint,number_waypoints):
+        waypoints = []
+        waypoints.append(start_waypoint)
+        temp_waypoint = start_waypoint
+        for _ in range(number_waypoints):
+            temp_waypoint = temp_waypoint.next(1)[0]
+            waypoints.append(temp_waypoint)
+        return waypoints
+    
     def reset(self):        
         # to avoid influnces from the former episode (angular momentun preserved)
         self.destroy_prevoius_actors()
+        
+        if self.trace_trajectories:
+            self.trace=[]
+            self.waypoints_trace = []
+            
+        self.list_skipped_waypoints = []
 
         self._reset_vehicle()
         self.world.tick()
@@ -312,6 +331,10 @@ class CarlaEnv(gym.Env):
         self.lane_invasion = False
         
         self.waypoint = self.map.get_waypoint(self.vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving ))
+        
+        self.waypoints = self.generate_list_waypoints(self.waypoint,self.total_number_waypoint)
+        self.current_waypoint_idx = 0
+        
         self.wp_is_reached =False
         self.counter_waypoint=0
         self.counter_step_zero_speed=0
@@ -789,11 +812,99 @@ class CarlaEnv(gym.Env):
         return alpha
 
 
+    def plot_trajectories(self):
+        x_trace = [p.x for p in self.trace]
+        y_trace = [p.y for p in self.trace]
+        x_waypoints = [p.x for p in self.waypoints_trace]
+        y_waypoints = [p.y for p in self.waypoints_trace]
+        x_skipped_waypoints = [p.transform.location.x for p in self.list_skipped_waypoints]
+        y_skipped_waypoints = [p.transform.location.y for p in self.list_skipped_waypoints]
+        # veichle trace
+        plt.scatter(x_trace,y_trace,c="blue")
+        # list waypoints
+        plt.scatter(x_waypoints,y_waypoints,c="orange")
+        # list skipped waypoints
+        plt.scatter(x_skipped_waypoints,y_skipped_waypoints,c="red")
+        #starting poistion veichle
+        plt.scatter(x_trace[0],y_trace[0],c="white")
+        #starting waypoint
+        plt.scatter(x_waypoints[0],y_waypoints[0],c="black")
+        # current aimed waypoint
+        plt.scatter(self.waypoint.transform.location.x,self.waypoint.transform.location.y,c="green")
+        
+        #plt.show()
+
+
+    def has_skipped_waypoints(self,vehicle_location,num_waypoints):
+        """This function it checks if the vheicle has skipped some waypoints.
+        The number of waypoint skippeble is defined by the num_waypoints parameter.
+
+        Args:
+            num_waypoints (_type_): number of skippeble waypoints.
+
+        Returns:
+            skipped (bool): the boolean indicates whether the car went too far or just skipped some waypoint.
+        """
+        
+        distances = []
+        waypoints = []
+        temp_waypoint = self.waypoint        
+        skipped = False
+        
+        
+    
+        # for i in range(num_waypoints):
+        #     temp_waypoint = temp_waypoint.next(1)[0]
+        #     if temp_waypoint is not None:
+        #         waypoints.append(temp_waypoint)
+        #         distance = np.sqrt(
+        #             (vehicle_location.x - temp_waypoint.transform.location.x) ** 2
+        #             + (vehicle_location.y - temp_waypoint.transform.location.y) ** 2
+        #         )
+        #         distances.append(distance)
+                
+        for i in range(num_waypoints):
+            temp_waypoint = self.waypoints[self.current_waypoint_idx + i+1]
+            if temp_waypoint is not None:
+                waypoints.append(temp_waypoint)
+                distance = np.sqrt(
+                    (vehicle_location.x - temp_waypoint.transform.location.x) ** 2
+                    + (vehicle_location.y - temp_waypoint.transform.location.y) ** 2
+                )
+                distances.append(distance)
+        
+        distances = np.array(distances)
+        argmin = np.argmin(distances)
+        
+        
+        
+        if distances[argmin] < self.max_distance_from_waypoint:
+            skipped=True
+            if self.verbose:
+                print(f"\nskipped previous WP: {argmin+1}, it continues for the {argmin+2}")
+            # self.waypoint = waypoints[argmin]
+            # self.previous_distance = distances[argmin]
+
+            # update list skipped
+            self.list_skipped_waypoints.append(self.waypoint)
+            for i in range(argmin):
+                self.list_skipped_waypoints.append(waypoints[i])
+        else:
+            self.list_skipped_waypoints.append(self.waypoint)
+            self.list_skipped_waypoints += waypoints
+        
+        return skipped, waypoints[argmin], distances[argmin], argmin
+                
     def   _get_reward(self, throttle, steer):
         info_dict = dict()
         info_dict["looped"] = False
         goal, done, total_reward = False, False, 0
         vehicle_location = self.vehicle.get_location()
+        
+        if self.trace_trajectories:
+            self.trace.append(vehicle_location)
+            #self.waypoints_trace.append(self.waypoint.transform.location)
+        
         
         distance = np.sqrt(
             (vehicle_location.x - self.waypoint.transform.location.x) ** 2
@@ -831,25 +942,37 @@ class CarlaEnv(gym.Env):
             total_reward = -1
 
 
-        self.remaining_distance = self.total_number_waypoint - self.counter_waypoint
+        self.remaining_distance = self.total_number_waypoint - self.counter_waypoint - len(self.list_skipped_waypoints)
         self.previous_distance = distance    
         
-        if distance <= 0.1:
+        if distance <= 0.3:
             self.wp_is_reached = True
-            # total_reward += 1e3#self.counter_waypoint
+            total_reward += 10
             # self.bonus +=1
+            
+            if self.trace_trajectories:
+                self.waypoints_trace.append(self.waypoint.transform.location)
 
             #update waypoint
             self.counter_waypoint+=1
-            self.waypoint = self.waypoint.next(1.)[0]
+            self.current_waypoint_idx+=1
+            #self.waypoint = self.waypoint.next(1.)[0]
+            self.waypoint = self.waypoints[self.current_waypoint_idx]
             if self.counter_waypoint +1 >= self.total_number_waypoint:
                 done = True
                 goal = True
         
         # elif distance > 1 + self.previous_distance and distance < self.max_distance_from_waypoint:
         #     total_reward = -1#-0.01 * distance
-            
-        elif distance >= self.max_distance_from_waypoint or self.counter_step_zero_speed == 300:
+        elif distance >= self.max_distance_from_waypoint:
+            skipped, new_waypoint, distance_to_new_wypoint, argmin = self.has_skipped_waypoints(vehicle_location,2)
+            self.waypoint = new_waypoint
+            self.current_waypoint_idx += argmin +1
+            self.previous_distance = distance_to_new_wypoint
+            if not skipped: 
+                done = True
+        
+        if self.counter_step_zero_speed == 300:
             self.counter_step_zero_speed = 0
             # total_reward = -1#-0.01 * distance
             done = True
