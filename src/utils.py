@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import pickle
 import random
 import subprocess
 from datetime import datetime
@@ -11,6 +12,15 @@ import torch
 
 import augmentations
 
+
+def load_replay_buffer(filename="replay_buffer"):
+    print("loading replay buffer...")
+    file = open(filename,"rb")
+    replay_buffer =pickle.load(file)
+    file.close()
+    print("Done")
+    print(len(replay_buffer))
+    return replay_buffer
 
 class eval_mode(object):
     def __init__(self, *models):
@@ -98,15 +108,6 @@ import numpy as np
 import torch
 # from carla_dqn import device
 from torch.utils.data import IterableDataset
-
-
-def load_replay_buffer(filename="replay_buffer"):
-    print("saving replay buffer...")
-    file = open(filename,"rb")
-    replay_buffer = pickle.load(file)
-    file.close()
-    print("Done")
-    return replay_buffer
 
 
 class Replay_Buffer_carla:
