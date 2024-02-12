@@ -65,7 +65,8 @@ class CarlaEnv(gym.Env):
         lower_limit_return_=-600,
         visualize_target=False,
         trace_trajectories=True,
-        verbose=False
+        verbose=False,
+        image_size=64
     ):
         """This function initialize the Carla enviroment.
 
@@ -101,6 +102,7 @@ class CarlaEnv(gym.Env):
         self.trace_trajectories = trace_trajectories
         self.verbose = verbose
         self.actor_list = []
+        self.image_size = image_size
         
         print(max_episode_steps)
         self._max_episode_steps = int(max_episode_steps)
@@ -178,8 +180,8 @@ class CarlaEnv(gym.Env):
         self.observation_space = None
 
         if self.observations_type == "sgqn_pixel":
-            obs = np.zeros((3, 84, 84))
-            state = np.zeros(11, dtype=np.float32)
+            obs = np.zeros((3, self.image_size, self.image_size))
+            state = np.zeros(9, dtype=np.float32)
             self.observation_space = spaces.Tuple(
                 (
                     spaces.Box(0, 1, shape=obs.shape, dtype=np.float32),
@@ -192,7 +194,7 @@ class CarlaEnv(gym.Env):
                 obs = self._get_state_obs()
 
             else:
-                obs = np.zeros((3, 84, 84))
+                obs = np.zeros((3, self.image_size, self.image_size))
 
             self.obs_dim = obs.shape
             self.observation_space = spaces.Box(
@@ -255,9 +257,9 @@ class CarlaEnv(gym.Env):
         # spawn camera for pixel observations
         if "pixel" in self.observations_type:
             bp = blueprint_library.find("sensor.camera.rgb")
-            bp.set_attribute("image_size_x", str(84))
-            bp.set_attribute("image_size_y", str(84))
-            bp.set_attribute("fov", str(84))
+            bp.set_attribute("image_size_x", str(self.image_size))
+            bp.set_attribute("image_size_y", str(self.image_size))
+            bp.set_attribute("fov", str(self.image_size))
             location = carla.Location(x=1.6, z=1.7)
             self.camera_vision = self.world.spawn_actor(
                 bp,
@@ -711,7 +713,7 @@ class CarlaEnv(gym.Env):
         else:
             # for sgqn_carla add distances to the state
             next_obs = self._get_pixel_obs(vision_image)
-            next_obs = next_obs.reshape(3, 84, 84)
+            next_obs = next_obs.reshape(3, self.image_size, self.image_size)
             state = self._get_state_obs()
             next_obs = (next_obs, state)
 
@@ -739,7 +741,7 @@ class CarlaEnv(gym.Env):
         return dx, dy
 
     def _get_pixel_obs(self, vision_image):
-        bgra = np.array(vision_image.raw_data).reshape(84, 84, 4)
+        bgra = np.array(vision_image.raw_data).reshape(self.image_size, self.image_size, 4)
         bgr = bgra[:, :, :3]
         rgb = np.flip(bgr, axis=2)
         return rgb/255
@@ -771,8 +773,8 @@ class CarlaEnv(gym.Env):
         acceleration = vector_to_scalar(self.vehicle.get_acceleration())
         angular_velocity = vector_to_scalar(self.vehicle.get_angular_velocity())
         velocity = vector_to_scalar(self.vehicle.get_velocity())
-        completed_wp = self.counter_waypoint/self.total_number_waypoint
-        completed_percentage_frame = (self.current_step+1)/self._max_episode_steps
+        #completed_wp = self.counter_waypoint/self.total_number_waypoint
+        #completed_percentage_frame = (self.current_step+1)/self._max_episode_steps
         
         return np.array(
             [
@@ -785,8 +787,8 @@ class CarlaEnv(gym.Env):
                 round(acceleration, 4),
                 round(angular_velocity, 4),
                 round(velocity, 4),
-                round(completed_wp,4),
-                round(completed_percentage_frame,4),                
+                #round(completed_wp,4),
+                #round(completed_percentage_frame,4),                
             ],
             dtype=np.float32,
         )
@@ -903,7 +905,7 @@ class CarlaEnv(gym.Env):
         
         if self.trace_trajectories:
             self.trace.append(vehicle_location)
-            #self.waypoints_trace.append(self.waypoint.transform.location)
+            self.waypoints_trace.append(self.waypoint.transform.location)
         
         
         distance = np.sqrt(
@@ -936,22 +938,22 @@ class CarlaEnv(gym.Env):
             self.previous_distance = distance    
             self.wp_is_reached = False
 
-        if distance < self.previous_distance:
-            total_reward = 1
+        diff =   distance - self.previous_distance 
+        if diff < 0:
+            total_reward = 1 
         else:
-            total_reward = -1
+            total_reward = -1 
 
 
-        self.remaining_distance = self.total_number_waypoint - self.counter_waypoint - len(self.list_skipped_waypoints)
+        total_reward += (-diff - abs(steer))*speed
+
+        self.remaining_distance = self.total_number_waypoint - self.counter_waypoint
         self.previous_distance = distance    
         
         if distance <= 0.3:
             self.wp_is_reached = True
-            total_reward += 10
+            # total_reward += 1e3#self.counter_waypoint
             # self.bonus +=1
-            
-            if self.trace_trajectories:
-                self.waypoints_trace.append(self.waypoint.transform.location)
 
             #update waypoint
             self.counter_waypoint+=1
@@ -964,15 +966,9 @@ class CarlaEnv(gym.Env):
         
         # elif distance > 1 + self.previous_distance and distance < self.max_distance_from_waypoint:
         #     total_reward = -1#-0.01 * distance
-        elif distance >= self.max_distance_from_waypoint:
-            skipped, new_waypoint, distance_to_new_wypoint, argmin = self.has_skipped_waypoints(vehicle_location,2)
-            self.waypoint = new_waypoint
-            self.current_waypoint_idx += argmin +1
-            self.previous_distance = distance_to_new_wypoint
-            if not skipped: 
-                done = True
-        
-        if self.counter_step_zero_speed == 300:
+            
+        elif distance >= self.max_distance_from_waypoint or self.counter_step_zero_speed == 300:
+            #self.plot_trajectories()
             self.counter_step_zero_speed = 0
             # total_reward = -1#-0.01 * distance
             done = True

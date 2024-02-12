@@ -71,7 +71,7 @@ def weight_init(m):
 class CenterCrop(nn.Module):
     def __init__(self, size):
         super().__init__()
-        assert size in {84, 100}, f"unexpected size: {size}"
+        assert size in {64, 100}, f"unexpected size: {size}"
         self.size = size
 
     def forward(self, x):
@@ -79,7 +79,7 @@ class CenterCrop(nn.Module):
         if x.size(2) == self.size and x.size(3) == self.size:
             return x
         assert x.size(3) == 100, f"unexpected size: {x.size(3)}"
-        if self.size == 84:
+        if self.size == 64:
             p = 8
         return x[:, :, p:-p, p:-p]
 
@@ -138,7 +138,7 @@ class SharedCNN(nn.Module):
         self.num_filters = num_filters
 
         self.layers = [
-            CenterCrop(size=84),
+            CenterCrop(size=64),
             NormalizeImg(),
             nn.Conv2d(obs_shape[0], num_filters, 3, stride=2),
         ]

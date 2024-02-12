@@ -19,7 +19,7 @@ from env.wrappers import FrameStack_carla, VideoRecord_carla
 from logger import Logger
 from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
                    create_video_from_images, load_dataset_for_carla,
-                   load_replay_buffer)
+                   load_replay_buffer, saturate_replay_buffer)
 
 
 def evaluate(
@@ -219,6 +219,8 @@ def main(
     replay_buffer = None
     if op.exists(args.replay_buffer_path):
         replay_buffer = load_replay_buffer(args.replay_buffer_path)
+        replay_buffer.capacity = len(replay_buffer)+1
+        saturate_replay_buffer(replay_buffer,args.capacity)
     else:
         # Create replay buffer
         replay_buffer = utils.Replay_Buffer_carla(
@@ -355,6 +357,8 @@ def main(
             #action = clip_action(action,env.action_space.spaces)
 
         else:
+            if train_step == args.init_steps:
+                saturate_replay_buffer(replay_buffer,args.capacity)
             # sgqn
             with utils.eval_mode(agent):
                 action = agent.sample_action(obs)
@@ -423,6 +427,7 @@ def main(
 
         obs = next_obs
 
+
     print("Completed training for", work_dir)
     return evaluated_episodes
 
@@ -475,16 +480,21 @@ if __name__ == "__main__":
             + 1
         )
 
-    folder = 10410
-    episode = 100
-    load_model = (
-        f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",
-        episode,
-    )
-    # load_model = None
+    folder = 10470
+    episode = 49
+    # load_model = (
+    #     f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",
+    #     episode,
+    # )
+    load_model = None
     # try:
-    args.replay_buffer_path = ""#"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/replay_buffer_10410"
+    args.replay_buffer_path = ""#"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/replay_buffer_10470_2"
     
+    if args.replay_buffer_path != "":
+        args.init_steps = 0
+        
+        
+    args.minimum_alpha = 0.3
     evaluated_episodes = main(args, load_model)
 
 
