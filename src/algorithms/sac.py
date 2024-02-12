@@ -28,6 +28,7 @@ class SAC(object):
         self.actor_update_freq = args.actor_update_freq
         self.critic_target_update_freq = args.critic_target_update_freq
         self.writer = args.writer_tensorboard
+        self.min_alpha = torch.tensor(args.minimum_alpha,dtype=torch.float64, requires_grad=True).cuda()
 
         shared_cnn = m.SharedCNN(
             obs_shape[0], args.num_shared_layers, args.num_filters
@@ -95,6 +96,15 @@ class SAC(object):
     @property
     def alpha(self):
         return self.log_alpha.exp()
+    
+    def select_alpha(self):
+        alpha = self.alpha
+        if  alpha > self.min_alpha:
+            return alpha
+        else:
+            return self.min_alpha
+        
+        
 
     def _obs_to_input(self, obs):
         if isinstance(obs, utils.LazyFrames):
@@ -124,7 +134,7 @@ class SAC(object):
             target_Q1, target_Q2 = self.critic_target(
                 next_obs[0], policy_action, next_obs[1]
             )
-            target_V = torch.min(target_Q1, target_Q2) - self.alpha.detach() * log_pi
+            target_V = torch.min(target_Q1, target_Q2) - self.select_alpha().detach() * log_pi
             target_Q = reward.unsqueeze(1) + (
                 not_done.unsqueeze(1) * self.discount * target_V
             )
@@ -147,11 +157,11 @@ class SAC(object):
         actor_Q1, actor_Q2 = self.critic(obs[0], pi, obs[1], detach=True)
 
         actor_Q = torch.min(actor_Q1, actor_Q2)
-        actor_loss = (self.alpha.detach() * log_pi - actor_Q).mean()
+        actor_loss = (self.select_alpha().detach() * log_pi - actor_Q).mean()
 
         if L is not None:
             L.log("train/actor_loss", actor_loss, step)
-            entropy = 0.5 * log_std.shape[1] * (1.0 + np.log(2 * np.pi)) + log_std.sum(
+            entropy = self.select_alpha().detach() * log_std.shape[1] * (1.0 + np.log(2 * np.pi)) + log_std.sum(
                 dim=-1
             )
 
@@ -161,14 +171,16 @@ class SAC(object):
 
         if update_alpha:
             self.log_alpha_optimizer.zero_grad()
-            alpha_loss = (self.alpha * (-log_pi - self.target_entropy).detach()).mean()
+            alpha_loss = (self.select_alpha() * (-log_pi - self.target_entropy).detach()).mean()
 
             if L is not None:
                 L.log("train/alpha_loss", alpha_loss, step)
-                L.log("train/alpha_value", self.alpha, step)
+                L.log("train/alpha_value", self.select_alpha(), step)
 
             alpha_loss.backward()
             self.log_alpha_optimizer.step()
+        else:
+            alpha_loss = 0
 
         return actor_loss, alpha_loss
 
