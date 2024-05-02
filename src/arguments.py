@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument("--discount", default=0.99, type=float)
     parser.add_argument(
         "--init_steps",
-        default=2500,
+        default=2000,
         type=int,
         help="the number of initial steps to take before the agent will be update after each frame",
     )
@@ -57,7 +57,7 @@ def parse_args():
     parser.add_argument("--encoder_tau", default=0.05, type=float)
 
     # entropy maximization
-    parser.add_argument("--init_temperature", default=0.3, type=float)
+    parser.add_argument("--init_temperature", default=0.5, type=float)
     parser.add_argument("--alpha_lr", default=1e-4, type=float)
     parser.add_argument("--alpha_beta", default=0.5, type=float)
 
@@ -143,7 +143,7 @@ def parse_args():
         args.image_size = 100
         args.image_crop_size = 84
     else:
-        args.image_size = 84
-        args.image_crop_size = 84
+        args.image_size = 64
+        args.image_crop_size = 64
 
     return args

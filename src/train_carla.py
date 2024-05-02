@@ -480,7 +480,7 @@ if __name__ == "__main__":
             + 1
         )
 
-    folder = 10470
+    folder = 1
     episode = 49
     # load_model = (
     #     f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",

@@ -219,7 +219,7 @@ class ColorWrapper_carla(gym.Wrapper):
                 self.alpha * frame + (1 - self.alpha) * frames_from_dataset[i]
             )
             obs.frames[i] = obs.frames[i].astype(np.int16)
-            # plt.imshow(obs.frames[i].reshape((84, 84, 3)))
+            # plt.imshow(obs.frames[i].reshape((64, 64, 3)))
             # plt.show()
         return obs, reward, done, info
 
@@ -293,14 +293,14 @@ class FrameStack_carla(gym.Wrapper):
 
     def reset(self):
         obs = self.env.reset()
-        # obs = obs.reshape((3, 84, 84))
+        # obs = obs.reshape((3, 64, 64))
         for _ in range(self._k):
             self._frames.append(obs)
         return self._get_obs()
 
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
-        # obs = obs.reshape((3, 84, 84))
+        # obs = obs.reshape((3, 64, 64))
         self._frames.append(obs)
         return self._get_obs(), reward, done, info
 
@@ -353,7 +353,7 @@ class VideoRecord_carla(gym.Wrapper):
         obs, reward, done, info = self.env.step(action)
         # if self.episode % self.n_episodes == 0:
         self.update_filename(self.paths[0])
-        img = obs[0].reshape(84, 84, 3) * 255
+        img = obs[0].reshape(64, 64, 3) * 255
         self.save_image(self.filename, img.astype(np.uint8))
         if self.render_display is not False:
             self.update_filename(self.paths[1])

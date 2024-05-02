@@ -62,6 +62,7 @@ class CarlaEnv(gym.Env):
         unload_map_layer=None,
         max_episode_steps=1000,
         total_number_waypoint = 500,
+        distance_factor_between_WPs=1,
         lower_limit_return_=-600,
         visualize_target=False,
         trace_trajectories=True,
@@ -107,6 +108,7 @@ class CarlaEnv(gym.Env):
         print(max_episode_steps)
         self._max_episode_steps = int(max_episode_steps)
         self.total_number_waypoint = total_number_waypoint
+        self.distance_factor_between_WPs = distance_factor_between_WPs
         self.current_step = 0
 
         # used in reward function
@@ -172,7 +174,7 @@ class CarlaEnv(gym.Env):
         self.waypoint = None
         self.counter_waypoint = 0
         self.counter_step_zero_speed = 0
-        self.max_distance_from_waypoint = 2
+        self.max_distance_from_waypoint = None
 
         # weather
         self.weather = Weather(self.world, self.changing_weather_speed)
@@ -299,14 +301,25 @@ class CarlaEnv(gym.Env):
             self.actor_list.clear()
             assert len(self.actor_list)==0 , f"list still contains something {self.actor_list}"
     
-    def generate_list_waypoints(self,start_waypoint,number_waypoints):
+    def generate_list_waypoints(self,start_waypoint,number_waypoints,distance_between_2_wawypoints):
         waypoints = []
         waypoints.append(start_waypoint)
         temp_waypoint = start_waypoint
         for _ in range(number_waypoints):
-            temp_waypoint = temp_waypoint.next(1)[0]
+            temp_waypoint = temp_waypoint.next(distance_between_2_wawypoints)[0]
             waypoints.append(temp_waypoint)
+        
+        distance = np.sqrt(
+                    (waypoints[0].transform.location.x - waypoints[1].transform.location.x) ** 2
+                    + (waypoints[0].transform.location.y - waypoints[1].transform.location.y) ** 2
+                )
+        self.max_distance_from_waypoint = distance * 1.5
         return waypoints
+    
+    def draw_next_N_waypoints(self,N=10,starting_from=0,lifetime=15):
+        for i in range(N):
+            self.world.debug.draw_point(self.waypoints[starting_from + i ].transform.location, size=0.2, life_time=lifetime+i*2, color=carla.Color(143, 0, 255, 0))
+        
     
     def reset(self):        
         # to avoid influnces from the former episode (angular momentun preserved)
@@ -334,9 +347,19 @@ class CarlaEnv(gym.Env):
         
         self.waypoint = self.map.get_waypoint(self.vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving ))
         
-        self.waypoints = self.generate_list_waypoints(self.waypoint,self.total_number_waypoint)
+        self.waypoints = self.generate_list_waypoints(self.waypoint,self.total_number_waypoint,self.distance_factor_between_WPs)
         self.current_waypoint_idx = 0
         
+        # for i,w in enumerate(self.waypoints):
+        #     # draw string in simulator view .sh file
+        #     # self.world.debug.draw_string(w.transform.location, 'O', draw_shadow=False,
+        #     #                                 color=carla.Color(r=255, g=0, b=0), life_time=120.0,
+        #     #                                 persistent_lines=True)
+            
+        #     # draw virtual point in world object
+        #     self.world.debug.draw_point(w.transform.location, size=0.2, life_time=45*i, color=carla.Color(238, 18, (137+i)%255, 0))
+        
+        self.draw_next_N_waypoints(10,0)
         self.wp_is_reached =False
         self.counter_waypoint=0
         self.counter_step_zero_speed=0
@@ -813,7 +836,6 @@ class CarlaEnv(gym.Env):
             
         return alpha
 
-
     def plot_trajectories(self):
         x_trace = [p.x for p in self.trace]
         y_trace = [p.y for p in self.trace]
@@ -835,7 +857,6 @@ class CarlaEnv(gym.Env):
         plt.scatter(self.waypoint.transform.location.x,self.waypoint.transform.location.y,c="green")
         
         #plt.show()
-
 
     def has_skipped_waypoints(self,vehicle_location,num_waypoints):
         """This function it checks if the vheicle has skipped some waypoints.
@@ -940,9 +961,9 @@ class CarlaEnv(gym.Env):
 
         diff =   distance - self.previous_distance 
         if diff < 0:
-            total_reward = 1 
+            total_reward = 1 + throttle
         else:
-            total_reward = -1 
+            total_reward = -1 - throttle
 
 
         total_reward += (-diff - abs(steer))*speed
@@ -950,7 +971,7 @@ class CarlaEnv(gym.Env):
         self.remaining_distance = self.total_number_waypoint - self.counter_waypoint
         self.previous_distance = distance    
         
-        if distance <= 0.3:
+        if distance <= 3:
             self.wp_is_reached = True
             # total_reward += 1e3#self.counter_waypoint
             # self.bonus +=1
@@ -964,10 +985,12 @@ class CarlaEnv(gym.Env):
                 done = True
                 goal = True
         
+        if (self.counter_waypoint + 4) % 10 ==0:
+            self.draw_next_N_waypoints(14,self.counter_waypoint,20)
         # elif distance > 1 + self.previous_distance and distance < self.max_distance_from_waypoint:
         #     total_reward = -1#-0.01 * distance
             
-        elif distance >= self.max_distance_from_waypoint or self.counter_step_zero_speed == 300:
+        elif distance >= self.max_distance_from_waypoint or self.counter_step_zero_speed == 2000:
             #self.plot_trajectories()
             self.counter_step_zero_speed = 0
             # total_reward = -1#-0.01 * distance
