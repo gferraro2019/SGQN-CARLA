@@ -35,7 +35,7 @@ def evaluate(
 ):
     episode_returns = []
     distance = None
-    info = None
+    info = {"speed":0}
     for n_episode in range(n_episodes):
         obs = env.reset()
         window_tot_reward.reset_tot_reward()
@@ -60,6 +60,11 @@ def evaluate(
                 # action = agent.select_action(obs)
 
                 cum_reward = 0
+                if abs(action[1]) < 0.1:
+                    action[1]=0.0
+                    
+                if info["speed"]>=20:
+                    action[0]=0.0
                 # repeat action k times
                 for _ in range(args.action_repeat):
                     steps += 1
@@ -163,6 +168,7 @@ def main(
         "Custom",  # "All",
         max_episode_steps,
         lower_limit_return_=args.lower_limit_return_,
+        distance_factor_between_WPs=10,
         # visualize_target=True
     )
 
@@ -189,6 +195,9 @@ def main(
                 "Custom",  # "All",
                 max_episode_steps,
                 lower_limit_return_=args.lower_limit_return_,
+                distance_factor_between_WPs=10,
+                size_target_point=args.size_target_point
+                
                 # visualize_target=True
             )
         else:
@@ -207,6 +216,8 @@ def main(
                 None,
                 max_episode_steps,
                 lower_limit_return_=args.lower_limit_return_,
+                size_target_point=args.size_target_point
+                
             )
 
         # wrap test envs
@@ -261,7 +272,7 @@ def main(
     # Start training
     steps_per_episode = 0
     
-    info=None
+    info={"speed":0}
     for train_step in range(0, args.train_steps + 1):
         # while n_episode < args.n_episodes + 1:
         # EVALUATE:
@@ -357,8 +368,8 @@ def main(
             #action = clip_action(action,env.action_space.spaces)
 
         else:
-            if train_step == args.init_steps:
-                saturate_replay_buffer(replay_buffer,args.capacity)
+            # if train_step == args.init_steps:
+            #     saturate_replay_buffer(replay_buffer,args.capacity)
             # sgqn
             with utils.eval_mode(agent):
                 action = agent.sample_action(obs)
@@ -371,6 +382,7 @@ def main(
                 # action = a  # np.concatenate((a[0], a[1]))
             #     action[0] = np.clip(action[0], 0, 1)
             #     action[1] = np.clip(action[1], -0.3, 0.3)
+            
 
             # simple sac
             # agent.set_train_mode()
@@ -386,7 +398,11 @@ def main(
                 # agent.update(
                 #     replay_buffer, batch_size=256, logger=L, trainstep=train_step
                 # )
-
+        if abs(action[1]) < 0.1:
+            action[1]=0.0
+            
+        if info["speed"]>=20:
+            action[0]=0.0
         # Take train_step
         cum_reward = 0
         for _ in range(args.action_repeat):
@@ -480,13 +496,13 @@ if __name__ == "__main__":
             + 1
         )
 
-    folder = 1
-    episode = 49
-    # load_model = (
-    #     f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",
-    #     episode,
-    # )
-    load_model = None
+    folder = 10233
+    episode = 1100
+    load_model = (
+        f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",
+        episode,
+    )
+    #load_model = None
     # try:
     args.replay_buffer_path = ""#"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/replay_buffer_10470_2"
     

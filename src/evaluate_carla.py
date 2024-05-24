@@ -47,6 +47,8 @@ def main(args):
         "Custom",  # "All",
         max_episode_steps,
         lower_limit_return_=args.lower_limit_return_,
+        distance_factor_between_WPs=10,
+        size_target_point=args.size_target_point
     )
     env = FrameStack_carla(env, args.frame_stack)
 
@@ -55,10 +57,13 @@ def main(args):
     shp = (env.observation_space[0].shape, env.observation_space[1].shape)
     print("Observations.shapenano:", shp)
 
-    # Create the agent
-    agent = make_agent(obs_shape=shp, action_shape=[2], args=args)
+    args.minimum_alpha = 0.3
 
-    folder = 10530
+
+    # Create the agent
+    agent = make_agent(obs_shape=shp, action_shape=[2], env_action_spaces=env.action_space.spaces,args=args)
+
+    folder = 10226
 
     k = 0
     # Load existing actor and critic
@@ -80,9 +85,10 @@ def main(args):
             # EVALUATE:
 
             episode_rewards = []
+            info = {"speed":0}
 
             start_time = time.time()
-            for n_episode in range(1):
+            for n_episode in range(3):
                 obs = env.reset()
                 window_tot_reward.reset_tot_reward()
                 app2.processEvents()
@@ -96,9 +102,15 @@ def main(args):
                         with utils.eval_mode(agent):
                             action = agent.sample_action(obs)
 
+                        if abs(action[1]) < 0.1:
+                            action[1]=0.0
+                    
+                        if info["speed"]>=20:
+                            action[0]=0.0
+
                         cum_reward = 0
                         for _ in range(args.action_repeat):
-                            obs, reward, done, _ = env.step(action)
+                            obs, reward, done, info = env.step(action)
                             episode_step += 1
                             cum_reward += reward
 
@@ -113,7 +125,7 @@ def main(args):
                         app1.processEvents()
 
                         window_tot_reward.update_labels(
-                            n_episode, episode_reward, action
+                            n_episode, episode_reward, action,info["#WP"]
                         )
                         app2.processEvents()
 
