@@ -134,6 +134,7 @@ class Replay_Buffer_carla:
         self.capacity = capacity
         self.idx = 0
         self.batch_size = batch_size
+        self.indices = np.zeros(batch_size)
 
         assert self.calculate_memory_allocation()
 
@@ -169,114 +170,105 @@ class Replay_Buffer_carla:
     def add(self, observation):
         if len(self) < self.capacity:
             # self.content.append(observation)
-
+            temp_tensor = torch.tensor(observation[0][0], dtype=torch.float32).unsqueeze(0).to(self.device)
             self.states_img = torch.cat(
                 [
                     self.states_img,
-                    torch.tensor(observation[0][0], dtype=torch.float32)
-                    .unsqueeze(0)
-                    .to(self.device),
+                    temp_tensor,
                 ],
                 0,
             )
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[0][1], dtype=torch.float32).unsqueeze(0).to(self.device)
             self.states = torch.cat(
                 [
                     self.states,
-                    torch.tensor(observation[0][1], dtype=torch.float32)
-                    .unsqueeze(0)
-                    .to(self.device),
+                    temp_tensor,
                 ],
                 0,
             )
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[1], dtype=torch.float32).unsqueeze(0).to(self.device)
             self.actions = torch.cat(
                 [
                     self.actions,
-                    torch.tensor(observation[1], dtype=torch.float32)
-                    .unsqueeze(0)
-                    .to(self.device),
+                    temp_tensor,
                 ],
                 0,
             )
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[2], dtype=torch.float32).unsqueeze(0).to(self.device)
             self.rewards = torch.cat(
                 [
                     self.rewards,
-                    torch.tensor(observation[2], dtype=torch.float32)
-                    .unsqueeze(0)
-                    .to(self.device),
+                    temp_tensor,
                 ],
                 0,
             )
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[3][0], dtype=torch.float32).unsqueeze(0).to(self.device)
             self.next_states_img = torch.cat(
                 [
                     self.next_states_img,
-                    torch.tensor(observation[3][0], dtype=torch.float32)
-                    .unsqueeze(0)
-                    .to(self.device),
+                    temp_tensor,
                 ],
                 0,
             )
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[3][1], dtype=torch.float32).unsqueeze(0).to(self.device)
             self.next_states = torch.cat(
                 [
                     self.next_states,
-                    torch.tensor(observation[3][1], dtype=torch.float32)
-                    .unsqueeze(0)
-                    .to(self.device),
+                    temp_tensor,
                 ],
                 0,
             )
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[4], dtype=torch.float32).unsqueeze(0).to(self.device)
             self.dones = torch.cat(
                 [
                     self.dones,
-                    torch.tensor(observation[4], dtype=torch.bool)
-                    .unsqueeze(0)
-                    .to(self.device),
+                    temp_tensor,
                 ],
                 0,
             )
-
+            del temp_tensor
         else:
             # self.content[self.idx] = observation
-            self.states_img[self.idx] = (
-                torch.tensor(observation[0][0], dtype=torch.float32)
-                .unsqueeze(0)
-                .to(self.device)
-            )
-
-            self.states[self.idx] = (
-                torch.tensor(observation[0][1], dtype=torch.float32)
-                .unsqueeze(0)
-                .to(self.device)
-            )
-
-            self.actions[self.idx] = (
-                torch.tensor(observation[1], dtype=torch.float32)
-                .unsqueeze(0)
-                .to(self.device)
-            )
-
-            self.rewards[self.idx] = (
-                torch.tensor(observation[2], dtype=torch.float32)
-                .unsqueeze(0)
-                .to(self.device)
-            )
-
-            self.next_states_img[self.idx] = (
-                torch.tensor(observation[3][0], dtype=torch.float32)
-                .unsqueeze(0)
-                .to(self.device)
-            )
-
-            self.next_states[self.idx] = (
-                torch.tensor(observation[3][1], dtype=torch.float32)
-                .unsqueeze(0)
-                .to(self.device)
-            )
-
-            self.dones[self.idx] = (
-                torch.tensor(observation[4], dtype=torch.bool)
-                .unsqueeze(0)
-                .to(self.device)
-            )
+            
+            temp_tensor = torch.tensor(observation[0][0], dtype=torch.float32).unsqueeze(0).to(self.device)
+            self.states_img[self.idx] = temp_tensor
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[0][1], dtype=torch.float32).unsqueeze(0).to(self.device)
+            self.states[self.idx] = temp_tensor
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[1], dtype=torch.float32).unsqueeze(0).to(self.device)
+            self.actions[self.idx] = temp_tensor
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[2], dtype=torch.float32).unsqueeze(0).to(self.device)
+            self.rewards[self.idx] = temp_tensor
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[3][0], dtype=torch.float32).unsqueeze(0).to(self.device)
+            self.next_states_img[self.idx] = temp_tensor
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[3][1], dtype=torch.float32).unsqueeze(0).to(self.device)
+            self.next_states[self.idx] = temp_tensor
+            del temp_tensor
+            
+            temp_tensor = torch.tensor(observation[4], dtype=torch.float32).unsqueeze(0).to(self.device)
+            self.dones[self.idx] = temp_tensor
+            del temp_tensor
 
         self.idx = (self.idx + 1) % self.capacity
 
@@ -295,16 +287,16 @@ class Replay_Buffer_carla:
 
             else:
                 idx = random.sample(range(len(self)), self.batch_size)
-            idx = np.array(idx)
+            self.indices[:] = idx
             return (
 
-                (self.states_img[idx].to(device),
-                self.states[idx].to(device)),
-                self.actions[idx].to(device),
-                self.rewards[idx].to(device),
-                (self.next_states_img[idx].to(device),
-                self.next_states[idx].to(device)),
-                self.dones[idx].to(device),
+                (self.states_img[self.indices].to(device),
+                self.states[self.indices].to(device)),
+                self.actions[self.indices].to(device),
+                self.rewards[self.indices].to(device),
+                (self.next_states_img[self.indices].to(device),
+                self.next_states[self.indices].to(device)),
+                self.dones[self.indices].to(device),
             )
         else:
             assert "Can't sample: not enough elements!"
