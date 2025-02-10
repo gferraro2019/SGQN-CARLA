@@ -147,7 +147,7 @@ class ReplayBuffer_Carla:
     def can_sample(self):
         res = False
         # if len(self) >= self.capacity:
-        if len(self) >= self.batch_size * 2:
+        if len(self) >= self.batch_size * 10:
             res = True
         # print(f"{len(self)} collected")
         return res
