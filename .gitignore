@@ -12,6 +12,7 @@ events*
 replay_buffer*
 src/plotting_map*
 lanes
+wandb
 
 # Editors
 .vscode/
