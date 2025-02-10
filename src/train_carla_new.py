@@ -7,6 +7,8 @@ import torch
 from PyQt5 import QtCore, QtWidgets
 from zmq import device
 
+import wandb
+
 # import utils
 from algorithms_new.sac import SAC
 from arguments import parse_args
@@ -47,6 +49,19 @@ images_path = os.path.join("output", str(args.seed), "video_records", "display")
 # load datasent to to blend actual image from camera with a radom one from the database
 load_dataset_for_carla()
 
+# start a new wandb run to track this script
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="carla-sac",
+    # track hyperparameters and run metadata
+    config={
+        "learning_rate": 0.001,
+        "architecture": "fc",
+        "dataset": "carla",
+        "epochs": 0,
+    },
+)
+
 # set parameters from carla env
 frame_skip = 1
 max_episode_steps = (args.episode_length + frame_skip - 1) // frame_skip
@@ -75,15 +90,6 @@ env = CarlaEnv(
 
 # wrap env
 env = FrameStack_carla(env, args.frame_stack)
-
-# # Create replay buffer
-# replay_buffer = utils.Replay_Buffer_carla(
-#     capacity=args.capacity,
-#     batch_size=args.batch_size,
-#     device=args.device,
-#     state_shape=env.observation_space.spaces,
-# )
-
 
 print("Observations:", env.observation_space.shape)
 shp_observation = (env.observation_space[0].shape, env.observation_space[1].shape)
@@ -125,6 +131,8 @@ for train_step in range(0, args.train_steps + 1):
             # Save agent periodically
             if n_episode % args.save_freq == 0:
                 agent.save(model_dir, "carla", n_episode)
+
+        wandb.log({"ep_return": episode_return, "step_count": env.current_step})
 
         # Reset environment
         obs = env.reset()
@@ -178,12 +186,22 @@ for train_step in range(0, args.train_steps + 1):
     entropy = agent.train(train_step, args.device)
 
     # Update replay buffer
-    # observation = (obs, action, reward, next_obs, done_bool)
-    # replay_buffer.add(observation)
-
     replay_buffer.add(obs, next_obs, action, reward, done_bool)
 
     episode_return += reward
+
+    wandb.log(
+        {
+            "actor_loss": agent.actor_loss_value,
+            "q_loss": agent.q_loss_value,
+            "throttle": action[0],
+            "steer": action[1],
+            "reward": reward,
+            "distance": -distance,
+            "entropy": entropy,
+            "#WPs": info["#WP"],
+        }
+    )
 
     # Plot and update reward graph
     window_reward.update_plot_data(train_step, -distance)
