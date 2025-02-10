@@ -285,7 +285,11 @@ class FrameStack_carla(gym.Wrapper):
         self.observation_space = spaces.Tuple(
             (
                 spaces.Box(0, 255, shape=((shp1[0] * k,) + shp1[1:]), dtype=np.uint8),
-                spaces.Box(-np.inf, np.inf, shape=shp2),
+                spaces.Box(
+                    -np.inf,
+                    np.inf,
+                    shape=(shp2[0] * k,),
+                ),
             )
         )
 
