@@ -6,7 +6,7 @@ import torch
 from torch import from_numpy
 from torch.optim.adam import Adam
 
-from algorithms.model import PolicyNetwork, QvalueNetwork
+from algorithms_new.model import PolicyNetwork, QvalueNetwork
 
 
 class SAC:
@@ -191,7 +191,7 @@ class SAC:
                 tau * local_param.data + (1 - tau) * target_param.data
             )
 
-    def save(self, path, folder_name, eactions_valuesodes):
+    def save(self, path, folder_name, n_episodes):
         import os
 
         file_path = op.join(path, folder_name)
@@ -201,17 +201,17 @@ class SAC:
         torch.save(
             self.policy_network.state_dict(),
             os.path.join(
-                file_path, self.env_name + f"_policy_{eactions_valuesodes}_weights.pth"
+                file_path, self.env_name + f"_policy_{n_episodes}_weights.pth"
             ),
         )
 
-    def load_weights(self, path, folder_name, n_eactions_valuesodes):
+    def load_weights(self, path, folder_name, n_n_episodes):
         print("loading model...")
         filepath = op.join(
             path,
             "models",
             folder_name,
-            self.env_name + "_policy_" + str(n_eactions_valuesodes) + "_weights.pth",
+            self.env_name + "_policy_" + str(n_n_episodes) + "_weights.pth",
         )
         self.policy_network.load_state_dict(torch.load(filepath))
         print(f"...model {filepath} loaded.")
