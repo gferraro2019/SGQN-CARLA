@@ -72,7 +72,7 @@ class QvalueNetwork(nn.Module):
             in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1
         )
         self.fc1 = nn.Linear(
-            64 * state_dim[0][1] * state_dim[0][2] + 3 * state_dim[1][0] + action_dim,
+            64 * state_dim[0][1] * state_dim[0][2] + state_dim[1][0] + action_dim,
             self.n_hidden_filters,
         )
         init_weight(self.fc1)
@@ -116,7 +116,7 @@ class PolicyNetwork(nn.Module):
             in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1
         )
         self.fc1 = nn.Linear(
-            64 * (state_dim[0][1] * state_dim[0][2]) + 3 * state_dim[1][0],
+            64 * (state_dim[0][1] * state_dim[0][2]) + state_dim[1][0],
             self.n_hidden_filters,
         )
         init_weight(self.fc1)
