@@ -83,7 +83,9 @@ class QvalueNetwork(nn.Module):
         )
         init_weight(self.hidden2)
         self.hidden2.bias.data.zero_()
-        self.q_value = nn.Linear(in_features=self.n_hidden_filters, out_features=1)
+        self.q_value = nn.Linear(
+            in_features=self.n_hidden_filters, out_features=action_dim
+        )
         init_weight(self.q_value, initializer="xavier uniform")
         self.q_value.bias.data.zero_()
 
