@@ -117,8 +117,9 @@ env = CarlaEnv(
     max_episode_steps,
     lower_limit_return_=args.lower_limit_return_,
     distance_factor_between_WPs=5,
-    image_size=21,
+    image_size=32,
     # visualize_target=True
+    show_preview=True,
 )
 
 # wrap env

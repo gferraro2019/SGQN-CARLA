@@ -130,7 +130,8 @@ class CarlaEnv(gym.Env):
         trace_trajectories=True,
         verbose=False,
         image_size=64,
-        size_way_point=0.01,
+        camera_fov="160",
+        size_way_point=0.15,
         speed_limit=20,
         show_preview=False,
     ):
@@ -156,6 +157,7 @@ class CarlaEnv(gym.Env):
             ValueError: _description_
         """
         super(CarlaEnv, self).__init__()
+        self.camera_fov = camera_fov
         self.show_preview = show_preview
         self.render_display = render
         self.changing_weather_speed = float(changing_weather_speed)
@@ -385,7 +387,7 @@ class CarlaEnv(gym.Env):
             bp = blueprint_library.find("sensor.camera.rgb")
             bp.set_attribute("image_size_x", str(self.image_size))
             bp.set_attribute("image_size_y", str(self.image_size))
-            bp.set_attribute("fov", str(self.image_size))
+            bp.set_attribute("fov", self.camera_fov)
             location = self.location_base
             self.camera_vision = self.world.spawn_actor(
                 bp,
