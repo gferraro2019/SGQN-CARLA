@@ -209,7 +209,6 @@ class SAC:
         print("loading model...")
         filepath = op.join(
             path,
-            "models",
             folder_name,
             self.env_name + "_policy_" + str(n_n_episodes) + "_weights.pth",
         )
