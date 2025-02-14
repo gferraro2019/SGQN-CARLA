@@ -22,16 +22,49 @@ from utils import (
 )
 from utils_new import ReplayBuffer_Carla
 
-os.system("pkill -f 'terminal'")
+os.system("pkill -f 'CarlaUE4' ")
+os.system("pkill -f 'terminal' ")
 time.sleep(2)
 os.system(
-    'gnome-terminal -- bash -c "cd /home/dcas/g.ferraro/Desktop/CARLA/CARLA_0.9.14 && sh ./CarlaUE4.sh  -carla-port=2000 ; exec bash"'
+    'gnome-terminal -- bash -c "cd /home/dcas/g.ferraro/DONNEES/CARLA/CARLA_0.9.14 && sh ./CarlaUE4.sh  -carla-port=2000 ; exec bash"'
 )
 time.sleep(3)
 # np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
+
+
+def discretize_action(action, n_sub_actions=6):
+    throttle, steer = action
+    intervals = [-1 + (2 / n_sub_actions) * i for i in range(n_sub_actions + 1)]
+
+    def find_interval(value, radius_to_zero=0.10):
+        idx = 0
+        if abs(value) < radius_to_zero:
+            return 0.0
+        else:
+            if value < 0:
+                for bound in intervals[1:]:
+                    if value >= bound:
+                        idx += 1
+                    else:
+                        break
+            else:
+                for bound in intervals[:-1]:
+                    if value >= bound:
+                        idx += 1
+                    else:
+                        break
+        return intervals[idx]
+
+    action[0] = find_interval(throttle)
+    action[1] = find_interval(steer)
+    return action
+
+
 args = parse_args()
 args.device = "cuda"
 args.init_steps = 2000
+args.action_repeat = 3
+args.capacity = 60_000
 
 app1 = QtWidgets.QApplication(sys.argv)
 window_reward = MainWindow_Reward()
@@ -64,7 +97,7 @@ wandb.init(
 
 # set parameters from carla env
 frame_skip = 1
-max_episode_steps = (args.episode_length + frame_skip - 1) // frame_skip
+max_episode_steps = 50000
 car = "citroen.c3"
 car_color = "255, 0, 0"
 
@@ -83,8 +116,8 @@ env = CarlaEnv(
     "Custom",  # "All",
     max_episode_steps,
     lower_limit_return_=args.lower_limit_return_,
-    distance_factor_between_WPs=10,
-    image_size=28,
+    distance_factor_between_WPs=5,
+    image_size=21,
     # visualize_target=True
 )
 
@@ -116,6 +149,12 @@ agent = SAC(
     replay_buffer=replay_buffer,
 )
 model_dir = "model"
+
+# load model
+model_name = None  # "700"
+if model_name is not None:
+    # load model
+    agent.load_weights("model", "carla", model_name)
 
 # Initialize variables
 n_episode, episode_return, done = -1, 0, True
@@ -150,8 +189,9 @@ for train_step in range(0, args.train_steps + 1):
     # TRAIN:
     if train_step < args.init_steps:
         action = np.random.uniform(low=-1, high=1, size=2)
-        if abs(action[1]) < 0.1:
+        if abs(action[0]) < 0.01:
             action[0] = 0.0
+        if abs(action[1]) < 0.01:
             action[1] = 0.0
     else:
         action, entropy = agent.select_action(
@@ -165,6 +205,7 @@ for train_step in range(0, args.train_steps + 1):
         action[idx] = 0.0
         action = action[0]
 
+    action = discretize_action(action, 6)
     cum_reward = 0
     for _ in range(args.action_repeat):
         steps_per_episode += 1
@@ -180,7 +221,7 @@ for train_step in range(0, args.train_steps + 1):
         distance = info["distance"]
         if done:
             break
-    reward = cum_reward
+    reward = cum_reward / args.action_repeat
 
     # train
     entropy = agent.train(train_step, args.device)
@@ -200,6 +241,10 @@ for train_step in range(0, args.train_steps + 1):
             "distance": -distance,
             "entropy": entropy,
             "#WPs": info["#WP"],
+            "acceleration": info["acceleration"],
+            "velocity": info["velocity"],
+            "angular_velocity": info["angular_velocity"],
+            "dot_product": info["dot_product"],
         }
     )
 
