@@ -97,18 +97,12 @@ class ReplayBuffer_Carla:
     @torch.no_grad()
     def add(self, obs, next_obs, actions, rewards, dones):
         temp_tensor = torch.tensor(obs[0], dtype=torch.float32).detach().to(self.device)
-        size_sample = temp_tensor.shape[0]
-        interval = [self.idx, 0]
-        if self.idx + size_sample < self.capacity:
-            interval[1] = self.idx + size_sample
-        else:
-            interval[1] = None  # size_sample + interval[0]
 
-        self.states_img[interval[0] : interval[1]] = temp_tensor
+        self.states_img[self.idx] = temp_tensor
         del temp_tensor
 
         temp_tensor = torch.tensor(obs[1], dtype=torch.float32).detach().to(self.device)
-        self.states[interval[0] : interval[1]] = temp_tensor
+        self.states[self.idx] = temp_tensor
         del temp_tensor
 
         temp_tensor = (
@@ -126,12 +120,12 @@ class ReplayBuffer_Carla:
         temp_tensor = (
             torch.tensor(next_obs[0], dtype=torch.float32).detach().to(self.device)
         )
-        self.next_states_img[interval[0] : interval[1]] = temp_tensor
+        self.next_states_img[self.idx] = temp_tensor
         del temp_tensor
         temp_tensor = (
             torch.tensor(next_obs[1], dtype=torch.float32).detach().to(self.device)
         )
-        self.next_states[interval[0] : interval[1]] = temp_tensor
+        self.next_states[self.idx] = temp_tensor
 
         del temp_tensor
 
@@ -139,15 +133,17 @@ class ReplayBuffer_Carla:
         self.dones[self.idx] = temp_tensor
         del temp_tensor
 
-        if self.idx + size_sample == self.capacity:
+        self.idx += 1
+
+        if self.idx == self.capacity:
             self.filled = True
 
-        self.idx = (self.idx + size_sample) % self.capacity
+        self.idx = self.idx % self.capacity
 
     def can_sample(self):
         res = False
         # if len(self) >= self.capacity:
-        if len(self) >= self.batch_size * 10:
+        if len(self) >= 2000:
             res = True
         # print(f"{len(self)} collected")
         return res
@@ -307,29 +303,29 @@ class ReplayBuffer:
         else:
             interval[1] = None  # size_sample + interval[0]
 
-        self.states_img[interval[0] : interval[1]] = temp_tensor
+        self.states_img[self.idx] = temp_tensor
         del temp_tensor
 
         temp_tensor = (
             torch.tensor(actions, dtype=torch.float32).detach().to(self.device)
         )
-        self.actions[interval[0] : interval[1]] = temp_tensor
+        self.actions[self.idx] = temp_tensor
         del temp_tensor
 
         temp_tensor = (
             torch.tensor(rewards, dtype=torch.float32).detach().to(self.device)
         )
-        self.rewards[interval[0] : interval[1]] = temp_tensor
+        self.rewards[self.idx] = temp_tensor
         del temp_tensor
 
         temp_tensor = (
             torch.tensor(next_obs, dtype=torch.float32).detach().to(self.device)
         )
-        self.next_states_img[interval[0] : interval[1]] = temp_tensor
+        self.next_states_img[self.idx] = temp_tensor
         del temp_tensor
 
         temp_tensor = torch.tensor(dones, dtype=torch.float32).detach().to(self.device)
-        self.dones[interval[0] : interval[1]] = temp_tensor
+        self.dones[self.idx] = temp_tensor
         del temp_tensor
 
         if self.idx + size_sample == self.capacity:
