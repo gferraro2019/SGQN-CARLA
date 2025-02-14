@@ -11,8 +11,8 @@ import random
 import sys
 import time
 
-# In[1]:
 import carla
+import cv2
 import gym
 import matplotlib.pyplot as plt
 import numpy as np
@@ -130,8 +130,9 @@ class CarlaEnv(gym.Env):
         trace_trajectories=True,
         verbose=False,
         image_size=64,
-        size_target_point=0.1,
+        size_way_point=0.01,
         speed_limit=20,
+        show_preview=False,
     ):
         """This function initialize the Carla enviroment.
 
@@ -155,6 +156,7 @@ class CarlaEnv(gym.Env):
             ValueError: _description_
         """
         super(CarlaEnv, self).__init__()
+        self.show_preview = show_preview
         self.render_display = render
         self.changing_weather_speed = float(changing_weather_speed)
         self.frame_skip = frame_skip
@@ -182,7 +184,7 @@ class CarlaEnv(gym.Env):
         self.wp_is_reached = 0
 
         # size of the target point in the goal trajectory
-        self.size_target_point = size_target_point
+        self.size_way_point = size_way_point
 
         self.visualize_target = visualize_target
 
@@ -454,7 +456,7 @@ class CarlaEnv(gym.Env):
         for i in range(N):
             self.world.debug.draw_point(
                 self.waypoints[starting_from + i].transform.location,
-                size=self.size_target_point,
+                size=self.size_way_point,
                 life_time=lifetime,
                 color=carla.Color(143, 0, 255, 0),
             )
@@ -849,6 +851,7 @@ class CarlaEnv(gym.Env):
 
             if done:
                 break
+
         return (
             next_obs,
             np.mean(self.rewards),
@@ -928,6 +931,13 @@ class CarlaEnv(gym.Env):
         else:
             # for sgqn_carla add distances to the state
             next_obs = self._get_pixel_obs(vision_image)
+            if self.show_preview:
+                img = next_obs.copy() * 255
+                img = img.astype(np.uint8)
+                img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                cv2.imshow("front_camera", img_bgr)
+                cv2.waitKey(1)
+
             next_obs = next_obs.reshape(3, self.image_size, self.image_size)
             state = self._get_state_obs()
             next_obs = (next_obs, state)
