@@ -86,12 +86,12 @@ class SAC:
         if not self.replay_buffer.can_sample():
             return 0, 0, 0
         else:
-            print("training...")
+            # print("training...")
             # take a batch
             states, actions, rewards, next_states, dones = self.replay_buffer.sample(
                 device=device
             )
-            print(len(states))
+            # print(len(states))
 
             # compute a' (target action) and its probs for s'
             target_actions, target_actions_log_probs, entropy = (

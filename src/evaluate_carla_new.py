@@ -150,7 +150,7 @@ agent = SAC(
 model_dir = "model"
 
 # load model
-model_name = None  # "700"
+model_name = "700"#None  # "700"
 if model_name is not None:
     # load model
     agent.load_weights("model", "carla", model_name)
@@ -163,13 +163,9 @@ distance = 5
 # Start training
 steps_per_episode = 0
 info = {"speed": 0,"#WP":0}
-print("Training...")
+print("Evaluating...")
 for train_step in range(0, args.train_steps + 1):
     if done:
-        if n_episode >= 0:
-            # Save agent periodically
-            if n_episode % args.save_freq == 0:
-                agent.save(model_dir, "carla", n_episode)
 
         wandb.log({"ep_return": episode_return, "step_count": env.current_step})
         print(f"N. Episode: {n_episode}, Eps.Return: {episode_return}, Steps Count.: {env.current_step}, N.WPs:{info['#WP']}")
@@ -187,24 +183,17 @@ for train_step in range(0, args.train_steps + 1):
         torch.cuda.empty_cache()
         n_episode += 1
 
-    # TRAIN:
-    if train_step < args.init_steps:
-        action = np.random.uniform(low=-1, high=1, size=2)
-        # if abs(action[0]) < 0.01:
-        #     action[0] = 0.0
-        # if abs(action[1]) < 0.01:
-        #     action[1] = 0.0
-    else:
-        action, entropy = agent.select_action(
-            (
-                torch.tensor(obs[0], dtype=torch.float32).unsqueeze(0).to(args.device),
-                torch.tensor(obs[1], dtype=torch.float32).unsqueeze(0).to(args.device),
-            )
+
+    action, entropy = agent.select_action(
+        (
+            torch.tensor(obs[0], dtype=torch.float32).unsqueeze(0).to(args.device),
+            torch.tensor(obs[1], dtype=torch.float32).unsqueeze(0).to(args.device),
         )
-        # clipping when close to 0
-        # idx = abs(action) < 0.01
-        # action[idx] = 0.0
-        action = action[0]
+    )
+    # clipping when close to 0
+    # idx = abs(action) < 0.01
+    # action[idx] = 0.0
+    action = action[0]
 
     # action = discretize_action(action, 6)
     cum_reward = 0
@@ -224,11 +213,6 @@ for train_step in range(0, args.train_steps + 1):
             break
     reward = cum_reward 
 
-    # train
-    entropy = agent.train(train_step, args.device)
-
-    # Update replay buffer
-    replay_buffer.add(obs, next_obs, action, reward, done_bool)
 
     episode_return += reward
 

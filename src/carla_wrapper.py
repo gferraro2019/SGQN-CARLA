@@ -3,7 +3,6 @@
 
 import glob
 import math
-
 # # from agents.navigation.roaming_agent import RoamingAgent
 import os
 import queue
@@ -20,15 +19,8 @@ import pygame
 from gym import spaces
 from mpmath import csch
 
-from utils import (
-    avoid_list,
-    clamp,
-    draw_image,
-    get_actor_name,
-    get_font,
-    should_quit,
-    vector_to_scalar,
-)
+from utils import (avoid_list, clamp, draw_image, get_actor_name, get_font,
+                   should_quit, vector_to_scalar)
 
 # from agents.navigation.roaming_agent import RoamingAgent
 try:
@@ -134,6 +126,7 @@ class CarlaEnv(gym.Env):
         size_way_point=0.15,
         speed_limit=20,
         show_preview=False,
+        max_zero_speed_steps = 300,
     ):
         """This function initialize the Carla enviroment.
 
@@ -157,6 +150,8 @@ class CarlaEnv(gym.Env):
             ValueError: _description_
         """
         super(CarlaEnv, self).__init__()
+        self.max_zero_speed_steps = max_zero_speed_steps
+        
         self.camera_fov = camera_fov
         self.show_preview = show_preview
         self.render_display = render
@@ -174,6 +169,9 @@ class CarlaEnv(gym.Env):
         self.image_size = image_size
         self.speed_limit = speed_limit
 
+        self.phase = "combo"
+        self.no_final_reward = False
+        
         print(max_episode_steps)
         self._max_episode_steps = int(max_episode_steps)
         self.total_number_waypoint = total_number_waypoint
@@ -261,7 +259,7 @@ class CarlaEnv(gym.Env):
 
         if self.observations_type == "sgqn_pixel":
             obs = np.zeros((3, self.image_size, self.image_size))
-            state = np.zeros(5, dtype=np.float32)
+            state = np.zeros(8, dtype=np.float32)
             self.observation_space = spaces.Tuple(
                 (
                     spaces.Box(0, 1, shape=obs.shape, dtype=np.float32),
@@ -341,6 +339,11 @@ class CarlaEnv(gym.Env):
         self.acceleration = None
         self.angular_velocity = None
         self.completed_wp_percent = 0.0
+        
+        #reward coefficient
+        self.a0 = 1 #distance
+        self.a1 = 10 # throttle
+        self.a2 = 4 # steer
 
     def spawn_sensors(self):
 
@@ -457,10 +460,10 @@ class CarlaEnv(gym.Env):
     def draw_next_N_waypoints(self, N=10, starting_from=0, lifetime=25):
         for i in range(N):
             self.world.debug.draw_point(
-                self.waypoints[starting_from + i].transform.location,
+                self.waypoints[(starting_from + i)%len(self.waypoints)].transform.location,
                 size=self.size_way_point,
                 life_time=lifetime,
-                color=carla.Color(143, 0, 255, 0),
+                color=carla.Color(0, 255, 0, 0),
             )
 
     def reset(self):
@@ -928,11 +931,15 @@ class CarlaEnv(gym.Env):
             )
             pygame.display.flip()
 
+        
+        self.throttle = throttle
+        self.steer = steer
         if self.observations_type == "state":
             next_obs = self._get_state_obs()
         else:
             # for sgqn_carla add distances to the state
             next_obs = self._get_pixel_obs(vision_image)
+            self.next_obs = next_obs.copy()
             if self.show_preview:
                 img = next_obs.copy() * 255
                 img = img.astype(np.uint8)
@@ -945,7 +952,7 @@ class CarlaEnv(gym.Env):
             next_obs = (next_obs, state)
 
         # get reward and next observation
-        reward, done, info = self._get_reward(throttle_brake, steer)
+        reward, done, info = self._get_reward(next_obs)
 
         # update cumulative reward to interupt if the lower limit is reached
         self.return_ += reward
@@ -979,7 +986,7 @@ class CarlaEnv(gym.Env):
         )
         bgr = bgra[:, :, :3]
         rgb = np.flip(bgr, axis=2)
-        return rgb / 255
+        return np.round(rgb / 255,2)
 
     def _get_state_obs1(self):
         """This funciton return a state of 9 elements:
@@ -1104,19 +1111,22 @@ class CarlaEnv(gym.Env):
             + versor_location.y * versor_location_wp.y
         )
 
-        self.velocity = vector_to_scalar(self.vehicle.get_velocity())
-        self.acceleration = vector_to_scalar(self.vehicle.get_acceleration())
-        self.angular_velocity = vector_to_scalar(self.vehicle.get_angular_velocity())
+        self.velocity = self.vehicle.get_velocity()
+        self.acceleration = self.vehicle.get_acceleration()
+        self.angular_velocity = self.vehicle.get_angular_velocity()
         # self.completed_wp_percent = self.counter_waypoint / self.total_number_waypoint
         # completed_percentage_frame = (self.current_step+1)/self._max_episode_steps
 
         return np.array(
-            [
-                round(distance / self.max_distance_from_waypoint, 3),
-                round(self.dot_product, 3),
-                round(self.velocity / 100, 3),
-                round(self.acceleration / 100, 3),
-                round(self.angular_velocity / 100, 3),
+            [   round(self.steer,2),
+                round(self.throttle,2),
+                round(distance / self.max_distance_from_waypoint, 2),
+                round(self.velocity.x, 2),
+                round(self.velocity.y, 2),
+                round(self.angular_velocity.z , 2),
+                round(self.acceleration.x, 2),
+                round(self.acceleration.y, 2),
+                # round(self.dot_product, 2),
                 # round(self.completed_wp_percent, 3),
                 # round(completed_percentage_frame,4),
             ],
@@ -1203,7 +1213,7 @@ class CarlaEnv(gym.Env):
         #         distances.append(distance)
 
         for i in range(num_waypoints):
-            temp_waypoint = self.waypoints[self.current_waypoint_idx + i + 1]
+            temp_waypoint = self.waypoints[(self.current_waypoint_idx + i + 1) % len(self.waypoints)]
             if temp_waypoint is not None:
                 waypoints.append(temp_waypoint)
                 distance = np.sqrt(
@@ -1234,7 +1244,168 @@ class CarlaEnv(gym.Env):
 
         return skipped, waypoints[argmin], distances[argmin], argmin
 
-    def _get_reward(self, throttle, steer):
+    
+    
+    def _get_reward(self, next_obs):
+        import cv2
+        import numpy as np
+        def find_pink_barycenter_distance( show_result=True):
+            # Load image
+            img = self.next_obs*255
+            img = img.astype(np.uint8)
+            height, width, _ = img.shape
+            img_rgb = img #cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            
+            # Image center
+            center_x = width / 2
+            center_y = height / 2
+
+            # Define the specific color you are searching for (RGB)
+            # target_color = np.array([143, 0, 255])
+            target_color = np.array([0, 255,0]).astype(np.uint8)
+            
+            tolerance = 30  # You can tweak this
+            xs=[]
+            ys = []
+            
+            for px in range(height-1):
+                for py in range(width-1):
+                    r_x = img[px,py,0]
+                    g_y = img[px,py,1]
+                    b_z = img[px,py,2] 
+                    if r_x == 0 and g_y >= 230 and b_z == 0:
+                        # print(r_x,g_y,b_z)
+                        xs.append(px)
+                        ys.append(py)
+
+        
+            if len(xs) == 0:
+                #print("No matching pixels found!")
+                return None, False
+
+            # Calculate barycenter
+            barycenter_x = np.mean(xs)
+            barycenter_y = np.mean(ys)
+
+            # Calculate Euclidean distance to image center
+            distance = np.sqrt((barycenter_x - width) ** 2 + (barycenter_y - center_y) ** 2)
+            mask = np.zeros((width,height)).astype(np.uint8)
+            mask[int(barycenter_x),int(barycenter_y)] = 255
+            cv2.imshow('Mask Color Barycenter', mask)
+            cv2.waitKey(1)
+            # Check if distance is a float
+            if not isinstance(distance, float):
+                raise TypeError(f"Expected distance to be a float, but got {type(distance).__name__}.")
+
+            if show_result:
+                img_out = img_rgb.copy()
+                cv2.circle(img_out, (int(barycenter_y), int(barycenter_x)), 2, (0, 255, 0), -1)
+                cv2.circle(img_out, (int(center_y), int(width)), 2, (255, 0, 0), -1)
+                cv2.line(img_out, (int(center_y), int(width)), (int(barycenter_y), int(barycenter_x)), (255, 255, 0), 1)
+                cv2.imshow('Specific Color Barycenter', cv2.cvtColor(img_out, cv2.COLOR_RGB2BGR))
+                cv2.waitKey(1)
+
+
+            return distance, True
+
+        def distance_to_wp(vehicle_location, waypoint_location):
+            return np.sqrt(
+                (vehicle_location.x - waypoint_location.x) ** 2
+                + (vehicle_location.y - waypoint_location.y) ** 2
+            )
+
+        self.info_dict.clear()
+        self.info_dict["looped"] = False
+        goal, done, total_reward = False, False, 0
+        vehicle_location = self.vehicle.get_location()
+
+        if self.trace_trajectories:
+            self.trace.append(vehicle_location)
+            self.waypoints_trace.append(self.waypoint.transform.location)
+
+        # compute distances from WPs
+        self.distances_to_WPs.clear()
+        for i in range(5):
+            waypoint = self.waypoints[(self.current_waypoint_idx + i) % len(self.waypoints)]
+            self.distances_to_WPs.append(
+                distance_to_wp(vehicle_location, waypoint.transform.location)
+            )
+        if len(self.distances_to_WPs) == 0:
+            print("empty list!!!")
+            
+        closest_wp = np.argmin(self.distances_to_WPs)
+        distance = self.distances_to_WPs[closest_wp]
+
+        if closest_wp != 0:
+            if self.current_waypoint_idx < self.total_number_waypoint:
+                # update waypoint to closest
+                self.current_waypoint_idx = (self.current_waypoint_idx+closest_wp ) % len(self.waypoints)
+                # total_reward += closest_wp * 20
+                # self.counter_waypoint += closest_wp
+            else:
+                done = True
+
+        
+        if vector_to_scalar(self.vehicle.get_velocity())<= 1:
+            self.counter_zero_progress += 1
+            total_reward += -10
+        else:
+            self.counter_zero_progress = 0
+        
+        # distance_from_baricenter, valid = find_pink_barycenter_distance()
+        # if valid:
+        #     print(distance_from_baricenter )
+        #     total_reward = 1/(distance_from_baricenter+0.01)
+        
+        # learn to not to steer too much
+        if self.phase == "stop steering":
+            total_reward =  1/( abs(self.steer) +0.01)
+            self.no_final_reward = True
+        elif self.phase == "go full gas":
+            total_reward =  1/((-1+self.throttle)+0.01)
+        elif self.phase == "go closer to the waypoint":
+            total_reward =  1/(distance+0.01)
+        elif self.phase == "combo":
+            total_reward +=  self.a0/(distance+0.001) + self.a1*self.throttle + self.a2/( abs(self.steer) +0.01)
+        
+        
+        if distance <= 1.5:
+            total_reward += 100
+            # update waypoint
+            self.counter_waypoint += 1
+            self.current_waypoint_idx = (self.current_waypoint_idx +1) % len(self.waypoints)
+
+        self.waypoint = self.waypoints[self.current_waypoint_idx]
+        if self.counter_waypoint + 5 > self.total_number_waypoint:
+            done = True
+            goal = True
+
+        elif (
+            distance >= self.max_distance_from_waypoint
+            or self.counter_zero_progress == self.max_zero_speed_steps
+        ):
+            self.counter_zero_progress = 0
+            # if not self.no_final_reward:
+            #     total_reward = -100*distance
+            done = True
+
+        self.draw_next_N_waypoints(5, self.current_waypoint_idx, 1)
+        self.remaining_WPs = self.total_number_waypoint - self.counter_waypoint
+        self.previous_distance = distance
+
+        self.info_dict["distance"] = -distance
+        self.info_dict["goal"] = goal
+        self.info_dict["#WP"] = self.counter_waypoint
+        # self.info_dict["velocity"] = self.velocity
+        # self.info_dict["angular_velocity"] = self.angular_velocity
+
+        # self.info_dict["acceleration"] = self.acceleration
+        # self.info_dict["dot_product"] = self.dot_product
+
+        return total_reward, done, self.info_dict
+
+    
+    def _get_reward5(self, throttle, steer):
 
         def distance_to_wp(vehicle_location, waypoint_location):
             return np.sqrt(
@@ -1254,7 +1425,7 @@ class CarlaEnv(gym.Env):
         # compute distances from WPs
         self.distances_to_WPs.clear()
         for waypoint in self.waypoints[
-            self.current_waypoint_idx : self.current_waypoint_idx + 5
+            self.current_waypoint_idx : (self.current_waypoint_idx + 5) % len(self.waypoints)
         ]:
             self.distances_to_WPs.append(
                 distance_to_wp(vehicle_location, waypoint.transform.location)

@@ -39,12 +39,14 @@ class ReplayBuffer_Carla:
         action_shape=(1, 2),
         device="cpu",
         normalize_rewards=False,
+        min_number_samples = 30_000,
     ):
         self.device = device
         # self.content = []
         self.state_shape = state_shape
 
         self.capacity = capacity
+        self.min_number_samples =min_number_samples
         self.idx = 0
         self.filled = False
         self.batch_size = batch_size
@@ -143,7 +145,7 @@ class ReplayBuffer_Carla:
     def can_sample(self):
         res = False
         # if len(self) >= self.capacity:
-        if len(self) >= 2000:
+        if len(self) >= self.min_number_samples:
             res = True
         # print(f"{len(self)} collected")
         return res
