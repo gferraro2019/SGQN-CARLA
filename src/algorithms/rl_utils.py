@@ -38,13 +38,15 @@ def compute_guided_backprop(obs, action, model):
     attribution = gbp.attribute(obs)
     return attribution
 
+
 def compute_guided_gradcam(obs, action, model):
     obs.requires_grad_()
     obs.retain_grad()
     model = ModelWrapper(model, action=action)
-    gbp = GuidedGradCam(model,layer=model.model.encoder.head_cnn.layers)
-    attribution = gbp.attribute(obs,attribute_to_layer_input=True)
+    gbp = GuidedGradCam(model, layer=model.model.encoder.head_cnn.layers)
+    attribution = gbp.attribute(obs, attribute_to_layer_input=True)
     return attribution
+
 
 def compute_vanilla_grad(critic_target, obs, action):
     obs.requires_grad_()
@@ -54,11 +56,11 @@ def compute_vanilla_grad(critic_target, obs, action):
     return obs.grad
 
 
-def compute_attribution(model, obs, action=None,method="guided_backprop"):
+def compute_attribution(model, obs, action=None, method="guided_backprop"):
     if method == "guided_backprop":
         return compute_guided_backprop(obs, action, model)
-    if method == 'guided_gradcam':
-        return compute_guided_gradcam(obs,action,model)
+    if method == "guided_gradcam":
+        return compute_guided_gradcam(obs, action, model)
     return compute_vanilla_grad(model, obs, action)
 
 

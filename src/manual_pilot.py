@@ -16,8 +16,12 @@ from arguments import parse_args
 from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla, VideoRecord_carla
 from logger import Logger
-from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
-                   create_video_from_images, load_dataset_for_carla)
+from utils import (
+    MainWindow_Reward,
+    MainWindow_Tot_Reward,
+    create_video_from_images,
+    load_dataset_for_carla,
+)
 
 
 def main(args):
@@ -57,7 +61,7 @@ def main(args):
 
     shp = (env.observation_space[0].shape, env.observation_space[1].shape)
     print("Observations.shapenano:", shp)
-    
+
     shp_observation = (env.observation_space[0].shape, env.observation_space[1].shape)
     print("Observations.shape:", shp_observation)
 
@@ -65,7 +69,7 @@ def main(args):
     print("actions.shape:", shp_action)
 
     # Create the agent
-    agent = make_agent(shp_observation, shp_action,env.action_space.spaces, args)
+    agent = make_agent(shp_observation, shp_action, env.action_space.spaces, args)
 
     folder = 10143
 
@@ -85,7 +89,6 @@ def main(args):
 
             agent.actor.load_state_dict(actor_state_dict)
             agent.critic.load_state_dict(critic_state_dict)
-
 
             #         # initialising pygame
             # pygame.init()
@@ -112,39 +115,37 @@ def main(args):
                     events = pygame.event.get()
                     for event in events:
                         if event.type == pygame.KEYDOWN:
-                            if event.key == 105:#i
-                                throttle_on =  True
+                            if event.key == 105:  # i
+                                throttle_on = True
                                 steer_right = False
                                 steer_left = False
-                            elif event.key == 107:#k
+                            elif event.key == 107:  # k
                                 throttle_on = False
                                 steer_right = False
                                 steer_left = False
-                            elif event.key == 106:#j
+                            elif event.key == 106:  # j
                                 steer_left = True
                                 steer_right = False
-                            elif event.key == 108:#l
+                            elif event.key == 108:  # l
                                 steer_right = True
                                 steer_left = False
-                            elif event.key == 242:#ò
+                            elif event.key == 242:  # ò
                                 steer_right = False
                                 steer_left = False
-                                
+
                     if throttle_on:
                         throttle = 0.5
                     if steer_left:
-                        steer= -0.3
+                        steer = -0.3
                     elif steer_right:
-                        steer= 0.3
+                        steer = 0.3
                     elif steer_left and steer_right:
                         steer = 0
-                                                        
-                    
-                    action = np.array([throttle,steer],dtype=np.float32)
+
+                    action = np.array([throttle, steer], dtype=np.float32)
                     # with torch.no_grad():
                     #     with utils.eval_mode(agent):
                     #         action = agent.sample_action(obs)
-
 
                     cum_reward = 0
                     for _ in range(args.action_repeat):
@@ -163,7 +164,9 @@ def main(args):
                     window_reward.update_plot_data(episode_step, -distance)
                     app1.processEvents()
 
-                    window_tot_reward.update_labels(n_episode, episode_return, action,info["#WP"])
+                    window_tot_reward.update_labels(
+                        n_episode, episode_return, action, info["#WP"]
+                    )
                     app2.processEvents()
 
                 duration = time.time() - start_time
@@ -194,7 +197,6 @@ if __name__ == "__main__":
     window_tot_reward = MainWindow_Tot_Reward(args.action_repeat)
     window_tot_reward.show()
     args.minimum_alpha = 0.3
-    
 
     main(args)
 

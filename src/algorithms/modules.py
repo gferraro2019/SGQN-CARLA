@@ -186,7 +186,15 @@ class Encoder(nn.Module):
 
 
 class Actor(nn.Module):
-    def __init__(self, encoder, action_shape, hidden_dim, log_std_min, log_std_max,env_action_spaces):
+    def __init__(
+        self,
+        encoder,
+        action_shape,
+        hidden_dim,
+        log_std_min,
+        log_std_max,
+        env_action_spaces,
+    ):
         super().__init__()
         self.encoder = encoder
         self.log_std_min = log_std_min
@@ -201,13 +209,13 @@ class Actor(nn.Module):
         self.mlp.apply(weight_init)
         self.lower_bounds = []
         self.upper_bounds = []
-        
+
         for box_space in env_action_spaces:
             self.upper_bounds.append(box_space.high[0])
             self.lower_bounds.append(box_space.low[0])
-            
-        self.lower_bounds  = torch.tensor(self.lower_bounds).cuda()
-        self.upper_bounds  = torch.tensor(self.upper_bounds).cuda()
+
+        self.lower_bounds = torch.tensor(self.lower_bounds).cuda()
+        self.upper_bounds = torch.tensor(self.upper_bounds).cuda()
 
     def forward(
         self,
@@ -223,8 +231,6 @@ class Actor(nn.Module):
         log_std = self.log_std_min + 0.5 * (self.log_std_max - self.log_std_min) * (
             log_std + 1
         )
-        
-        
 
         if compute_pi:
             std = log_std.exp()
@@ -240,10 +246,9 @@ class Actor(nn.Module):
             log_pi = None
 
         mu, pi, log_pi = squash(mu, pi, log_pi)
-        
-        
-        mu = torch.max(torch.min(mu,self.upper_bounds),self.lower_bounds)
-        pi = torch.max(torch.min(pi,self.upper_bounds),self.lower_bounds)
+
+        mu = torch.max(torch.min(mu, self.upper_bounds), self.lower_bounds)
+        pi = torch.max(torch.min(pi, self.upper_bounds), self.lower_bounds)
 
         return mu, pi, log_pi, log_std
 

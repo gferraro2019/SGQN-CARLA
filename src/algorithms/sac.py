@@ -21,14 +21,16 @@ class FeaturesHook:
 
 
 class SAC(object):
-    def __init__(self, obs_shape, action_shape,env_action_spaces, args):
+    def __init__(self, obs_shape, action_shape, env_action_spaces, args):
         self.discount = args.discount
         self.critic_tau = args.critic_tau
         self.encoder_tau = args.encoder_tau
         self.actor_update_freq = args.actor_update_freq
         self.critic_target_update_freq = args.critic_target_update_freq
         self.writer = args.writer_tensorboard
-        self.min_alpha = torch.tensor(args.minimum_alpha,dtype=torch.float64, requires_grad=True).cuda()
+        self.min_alpha = torch.tensor(
+            args.minimum_alpha, dtype=torch.float64, requires_grad=True
+        ).cuda()
 
         shared_cnn = m.SharedCNN(
             obs_shape[0], args.num_shared_layers, args.num_filters
@@ -53,15 +55,15 @@ class SAC(object):
             args.hidden_dim,
             args.actor_log_std_min,
             args.actor_log_std_max,
-            env_action_spaces
-            
+            env_action_spaces,
         ).cuda()
 
         self.critic = m.CriticState(
             critic_encoder,
             action_shape,
             args.hidden_dim,
-            state_dim=int(obs_shape[0][0] / 3)* obs_shape[1][0]).cuda()  # /3 because RGB channels
+            state_dim=int(obs_shape[0][0] / 3) * obs_shape[1][0],
+        ).cuda()  # /3 because RGB channels
         self.critic_target = deepcopy(self.critic)
 
         self.log_alpha = torch.tensor(np.log(args.init_temperature)).cuda()
@@ -96,15 +98,13 @@ class SAC(object):
     @property
     def alpha(self):
         return self.log_alpha.exp()
-    
+
     def select_alpha(self):
         alpha = self.alpha
-        if  alpha > self.min_alpha:
+        if alpha > self.min_alpha:
             return alpha
         else:
             return self.min_alpha
-        
-        
 
     def _obs_to_input(self, obs):
         if isinstance(obs, utils.LazyFrames):
@@ -134,7 +134,9 @@ class SAC(object):
             target_Q1, target_Q2 = self.critic_target(
                 next_obs[0], policy_action, next_obs[1]
             )
-            target_V = torch.min(target_Q1, target_Q2) - self.select_alpha().detach() * log_pi
+            target_V = (
+                torch.min(target_Q1, target_Q2) - self.select_alpha().detach() * log_pi
+            )
             target_Q = reward.unsqueeze(1) + (
                 not_done.unsqueeze(1) * self.discount * target_V
             )
@@ -161,9 +163,9 @@ class SAC(object):
 
         if L is not None:
             L.log("train/actor_loss", actor_loss, step)
-            entropy = self.select_alpha().detach() * log_std.shape[1] * (1.0 + np.log(2 * np.pi)) + log_std.sum(
-                dim=-1
-            )
+            entropy = self.select_alpha().detach() * log_std.shape[1] * (
+                1.0 + np.log(2 * np.pi)
+            ) + log_std.sum(dim=-1)
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
@@ -171,7 +173,9 @@ class SAC(object):
 
         if update_alpha:
             self.log_alpha_optimizer.zero_grad()
-            alpha_loss = (self.select_alpha() * (-log_pi - self.target_entropy).detach()).mean()
+            alpha_loss = (
+                self.select_alpha() * (-log_pi - self.target_entropy).detach()
+            ).mean()
 
             if L is not None:
                 L.log("train/alpha_loss", alpha_loss, step)

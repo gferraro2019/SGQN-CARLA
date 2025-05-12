@@ -1,3 +1,4 @@
+import gc
 import os
 import os.path as op
 import pickle
@@ -5,6 +6,7 @@ import sys
 import time
 
 import numpy as np
+import psutil
 import torch
 from PyQt5 import QtCore, QtWidgets
 from torch.utils.tensorboard import SummaryWriter
@@ -17,9 +19,14 @@ from arguments import parse_args
 from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla, VideoRecord_carla
 from logger import Logger
-from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
-                   create_video_from_images, load_dataset_for_carla,
-                   load_replay_buffer, saturate_replay_buffer)
+from utils import (
+    MainWindow_Reward,
+    MainWindow_Tot_Reward,
+    create_video_from_images,
+    load_dataset_for_carla,
+    load_replay_buffer,
+    saturate_replay_buffer,
+)
 
 
 def evaluate(
@@ -35,7 +42,7 @@ def evaluate(
 ):
     episode_returns = []
     distance = None
-    info = {"speed":0}
+    info = {"speed": 0}
     for n_episode in range(n_episodes):
         obs = env.reset()
         window_tot_reward.reset_tot_reward()
@@ -50,7 +57,7 @@ def evaluate(
             with torch.no_grad():
                 with utils.eval_mode(agent):
                     action = agent.sample_action(obs)
-                    #action = clip_action(action,env.action_space.spaces)
+                    # action = clip_action(action,env.action_space.spaces)
                 #         else:
                 # with utils.eval_mode(agent):
                 # action = agent.sample_action(obs)
@@ -61,10 +68,10 @@ def evaluate(
 
                 cum_reward = 0
                 if abs(action[1]) < 0.1:
-                    action[1]=0.0
-                    
-                if info["speed"]>=20:
-                    action[0]=0.0
+                    action[1] = 0.0
+
+                # if info["speed"]>=20:
+                #     action[0]=0.0
                 # repeat action k times
                 for _ in range(args.action_repeat):
                     steps += 1
@@ -83,7 +90,9 @@ def evaluate(
                 window_reward.update_plot_data(episode_step, -distance)
                 app1.processEvents()
 
-                window_tot_reward.update_labels(env.episode, episode_return, action,info["#WP"])
+                window_tot_reward.update_labels(
+                    env.episode, episode_return, action, info["#WP"]
+                )
                 app2.processEvents()
                 # log in tensorboard 15th step
                 if algorithm == "sgsac":
@@ -107,7 +116,7 @@ def evaluate(
             L.log(f"eval/episode", n_episode, step)
             L.log(f"eval/episode_return", episode_return, step)
             L.log("eval/distance", distance, step)
-            L.log("eval/number_wp",  info["#WP"],step)
+            L.log("eval/number_wp", info["#WP"], step)
             L.dump(step)
         episode_returns.append(episode_return)
 
@@ -196,8 +205,7 @@ def main(
                 max_episode_steps,
                 lower_limit_return_=args.lower_limit_return_,
                 distance_factor_between_WPs=10,
-                size_target_point=args.size_target_point
-                
+                size_target_point=args.size_target_point,
                 # visualize_target=True
             )
         else:
@@ -216,8 +224,7 @@ def main(
                 None,
                 max_episode_steps,
                 lower_limit_return_=args.lower_limit_return_,
-                size_target_point=args.size_target_point
-                
+                size_target_point=args.size_target_point,
             )
 
         # wrap test envs
@@ -230,14 +237,17 @@ def main(
     replay_buffer = None
     if op.exists(args.replay_buffer_path):
         replay_buffer = load_replay_buffer(args.replay_buffer_path)
-        replay_buffer.capacity = len(replay_buffer)+1
-        saturate_replay_buffer(replay_buffer,args.capacity)
+        replay_buffer.capacity = len(replay_buffer) + 1
+        saturate_replay_buffer(replay_buffer, args.capacity)
     else:
         # Create replay buffer
         replay_buffer = utils.Replay_Buffer_carla(
-            capacity=args.capacity, batch_size=args.batch_size, device=args.device,state_shape=env.observation_space.spaces
+            capacity=args.capacity,
+            batch_size=args.batch_size,
+            device=args.device,
+            state_shape=env.observation_space.spaces,
         )
-    
+
     print("Observations:", env.observation_space.shape)
 
     shp_observation = (env.observation_space[0].shape, env.observation_space[1].shape)
@@ -247,7 +257,7 @@ def main(
     print("actions.shape:", shp_action)
 
     # Create the agent
-    agent = make_agent(shp_observation, shp_action,env.action_space.spaces, args)
+    agent = make_agent(shp_observation, shp_action, env.action_space.spaces, args)
     # agent = simple_sac.SACAgent(state_dim=shp, action_dim=2)
 
     # load existing model to keep training it
@@ -271,8 +281,8 @@ def main(
 
     # Start training
     steps_per_episode = 0
-    
-    info={"speed":0}
+    max_RAM_allocation = 56
+    info = {"speed": 0}
     for train_step in range(0, args.train_steps + 1):
         # while n_episode < args.n_episodes + 1:
         # EVALUATE:
@@ -302,7 +312,9 @@ def main(
                 args.writer_tensorboard.add_scalar(
                     "Train/return", episode_return, train_step - 1
                 )
-                args.writer_tensorboard.add_scalar("Train/waypoints", info["#WP"], train_step-1)
+                args.writer_tensorboard.add_scalar(
+                    "Train/waypoints", info["#WP"], train_step - 1
+                )
                 # Save agent periodically
                 if n_episode % args.save_freq == 0:
                     torch.save(
@@ -346,6 +358,11 @@ def main(
                         evaluated_episodes.append(n_episode + i)
 
             # Reset environment
+            gc.collect()
+            if psutil.virtual_memory()[3] / 1_000_000_000 >= max_RAM_allocation:
+                replay_buffer.empty_replaybuffer()
+                args.init_steps += train_step + 1000
+
             obs = env.reset()
             done = False
             episode_return = 0
@@ -362,47 +379,52 @@ def main(
         # TRAIN:
         # Sample action for data collection
         if train_step < args.init_steps:
-            action = env.action_space.sample()
-            action = np.array([action[0][0],action[1][0]])
-            
-            #action = clip_action(action,env.action_space.spaces)
+            # action = env.action_space.sample()
+            # action = np.array([action[0][0],action[1][0]])
+
+            # action = clip_action(action,env.action_space.spaces)
+
+            # # use model
+            action = agent.sample_action(obs)
 
         else:
-            # if train_step == args.init_steps:
-            #     saturate_replay_buffer(replay_buffer,args.capacity)
+            if train_step == args.init_steps:
+                saturate_replay_buffer(replay_buffer, args.capacity)
             # sgqn
             with utils.eval_mode(agent):
                 action = agent.sample_action(obs)
-                #action = np.array([[action[0]],[action[1]]])
-                #action = (np.array(action[0]),np.array(action[1]))
-                #action = clip_action(action,env.action_space.spaces)
+                # action = np.array([[action[0]],[action[1]]])
+                # action = (np.array(action[0]),np.array(action[1]))
+                # action = clip_action(action,env.action_space.spaces)
                 # a = np.zeros(2)
                 # a[0] = np.clip(action[0], 0, 1)
                 # a[1] = np.clip(action[1], -0.3, 0.3)
                 # action = a  # np.concatenate((a[0], a[1]))
-            #     action[0] = np.clip(action[0], 0, 1)
-            #     action[1] = np.clip(action[1], -0.3, 0.3)
-            
-
-            # simple sac
-            # agent.set_train_mode()
-            # action = agent.select_action(obs)
-
-            # Run training update
-            num_updates = 1  # args.init_steps if train_step == args.init_steps else 1
-
-            for i in range(num_updates):
-                agent.update(replay_buffer, L, train_step)
+                #     action[0] = np.clip(action[0], 0, 1)
+                #     action[1] = np.clip(action[1], -0.3, 0.3)
 
                 # simple sac
-                # agent.update(
-                #     replay_buffer, batch_size=256, logger=L, trainstep=train_step
-                # )
+                # agent.set_train_mode()
+                # action = agent.select_action(obs)
+
+                # Run training update
+                if train_step % 100 == 0:
+                    num_updates = (
+                        1  # args.init_steps if train_step == args.init_steps else 1
+                    )
+                    for i in range(num_updates):
+                        agent.update(replay_buffer, L, train_step)
+
+                    # simple sac
+                    # agent.update(
+                    #     replay_buffer, batch_size=256, logger=L, trainstep=train_step
+                    # )
+
         if abs(action[1]) < 0.1:
-            action[1]=0.0
-            
-        if info["speed"]>=20:
-            action[0]=0.0
+            action[1] = 0.0
+
+        # if info["speed"]>=20:
+        #     action[0]=0.0
         # Take train_step
         cum_reward = 0
         for _ in range(args.action_repeat):
@@ -438,28 +460,29 @@ def main(
         window_reward.update_plot_data(train_step, -distance)
         app1.processEvents()
 
-        window_tot_reward.update_labels(n_episode, episode_return, action,info["#WP"])
+        window_tot_reward.update_labels(n_episode, episode_return, action, info["#WP"])
         app2.processEvents()
 
+        del obs, action, reward, done_bool, observation
         obs = next_obs
-
+        del next_obs
 
     print("Completed training for", work_dir)
     return evaluated_episodes
 
 
-def clip_action(action,env_action_spaces):
-    highs,lows = [],[]
+def clip_action(action, env_action_spaces):
+    highs, lows = [], []
     for box_space in env_action_spaces:
         highs.append(box_space.high)
         lows.append(box_space.low)
-        
+
     a = np.zeros(len(env_action_spaces))
-    for i,_ in enumerate(a):
-        a[i] = np.clip(action[i], lows[i],highs[i])
-    
-    return a#np.concatenate([elem for elem in a ])
-    
+    for i, _ in enumerate(a):
+        a[i] = np.clip(action[i], lows[i], highs[i])
+
+    return a  # np.concatenate([elem for elem in a ])
+
 
 if __name__ == "__main__":
     from tensorboard import program
@@ -496,23 +519,24 @@ if __name__ == "__main__":
             + 1
         )
 
-    folder = 10233
-    episode = 1100
+    folder = 10264
+    episode = 500
     load_model = (
         f"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/logs/carla_drive/sac/{folder}",
         episode,
     )
-    #load_model = None
+
+    # load_model = None
     # try:
-    args.replay_buffer_path = ""#"/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/replay_buffer_10470_2"
-    
+    args.replay_buffer_path = (
+        "/home/dcas/g.ferraro/gitRepos/SGQN-CARLA/long_training_replay_buffer"
+    )
+
     if args.replay_buffer_path != "":
         args.init_steps = 0
-        
-        
-    args.minimum_alpha = 0.3
-    evaluated_episodes = main(args, load_model)
 
+    args.minimum_alpha = 0.05
+    evaluated_episodes = main(args, load_model)
 
     # create video from images
     save_path = os.path.join("output", str(args.seed), "video_records", "avi")

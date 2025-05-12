@@ -8,13 +8,18 @@ from PyQt5 import QtCore, QtWidgets
 from zmq import device
 
 import wandb
+
 # import utils
 from algorithms_new.sac import SAC
 from arguments import parse_args
 from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla
-from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
-                   ReplayBuffer_carla, load_dataset_for_carla)
+from utils import (
+    MainWindow_Reward,
+    MainWindow_Tot_Reward,
+    ReplayBuffer_carla,
+    load_dataset_for_carla,
+)
 from utils_new import ReplayBuffer_Carla
 
 os.system("pkill -f 'CarlaUE4' ")
@@ -150,7 +155,7 @@ agent = SAC(
 model_dir = "model"
 
 # load model
-model_name = "700"#None  # "700"
+model_name = "300"  # None  # "700"
 if model_name is not None:
     # load model
     agent.load_weights("model", "carla", model_name)
@@ -160,16 +165,26 @@ n_episode, episode_return, done = -1, 0, True
 evaluated_episodes = []
 distance = 5
 
+# set frequency simulation
+hz = 50
+sim_step = 1 / hz
+settings = env.world.get_settings()
+settings.fixed_delta_seconds = sim_step
+env.world.apply_settings(settings)
+
 # Start training
 steps_per_episode = 0
-info = {"speed": 0,"#WP":0}
+info = {"speed": 0, "#WP": 0}
 print("Evaluating...")
+next_time = time.time()
 for train_step in range(0, args.train_steps + 1):
     if done:
 
         wandb.log({"ep_return": episode_return, "step_count": env.current_step})
-        print(f"N. Episode: {n_episode}, Eps.Return: {episode_return}, Steps Count.: {env.current_step}, N.WPs:{info['#WP']}")
-              
+        print(
+            f"N. Episode: {n_episode}, Eps.Return: {episode_return}, Steps Count.: {env.current_step}, N.WPs:{info['#WP']}"
+        )
+
         # Reset environment
         obs = env.reset()
         done = False
@@ -183,23 +198,22 @@ for train_step in range(0, args.train_steps + 1):
         torch.cuda.empty_cache()
         n_episode += 1
 
-
     action, entropy = agent.select_action(
         (
             torch.tensor(obs[0], dtype=torch.float32).unsqueeze(0).to(args.device),
             torch.tensor(obs[1], dtype=torch.float32).unsqueeze(0).to(args.device),
         )
     )
-    # clipping when close to 0
-    # idx = abs(action) < 0.01
-    # action[idx] = 0.0
     action = action[0]
 
-    # action = discretize_action(action, 6)
     cum_reward = 0
     for _ in range(args.action_repeat):
         steps_per_episode += 1
         next_obs, reward, done, info = env.step(action)
+        next_time += sim_step
+        sleep_duration = next_time - time.time()
+        if sleep_duration > 0:
+            time.sleep(sleep_duration)
 
         episode_step += 1
         done_bool = 0
@@ -211,8 +225,7 @@ for train_step in range(0, args.train_steps + 1):
         distance = info["distance"]
         if done:
             break
-    reward = cum_reward 
-
+    reward = cum_reward
 
     episode_return += reward
 
@@ -226,10 +239,6 @@ for train_step in range(0, args.train_steps + 1):
             "distance": -distance,
             "entropy": entropy,
             "#WPs": info["#WP"],
-            # "acceleration": info["acceleration"],
-            # "velocity": info["velocity"],
-            # "angular_velocity": info["angular_velocity"],
-            # "dot_product": info["dot_product"],
         }
     )
 

@@ -15,12 +15,13 @@ import augmentations
 
 def load_replay_buffer(filename="replay_buffer"):
     print("loading replay buffer...")
-    file = open(filename,"rb")
-    replay_buffer =pickle.load(file)
+    file = open(filename, "rb")
+    replay_buffer = pickle.load(file)
     file.close()
     print("Done")
     print(len(replay_buffer))
     return replay_buffer
+
 
 class eval_mode(object):
     def __init__(self, *models):
@@ -106,11 +107,14 @@ import random
 
 import numpy as np
 import torch
+
 # from carla_dqn import device
 from torch.utils.data import IterableDataset
 
 
 class Replay_Buffer_carla:
+
+    @torch.no_grad()
     def __init__(
         self,
         capacity=10_000,
@@ -122,14 +126,16 @@ class Replay_Buffer_carla:
     ):
         self.device = device
         # self.content = []
-        self.states_img = torch.empty(0, dtype=torch.float32).to(self.device)
-        self.states = torch.empty(0, dtype=torch.float32).to(self.device)
-        self.actions = torch.empty(0, dtype=torch.float32).to(self.device)
-        self.rewards = torch.empty(0, dtype=torch.float32).to(self.device)
-        self.next_states_img = torch.empty(0, dtype=torch.float32).to(self.device)
-        self.next_states = torch.empty(0, dtype=torch.float32).to(self.device)
-        self.dones = torch.empty(0, dtype=torch.bool).to(self.device)
-        self.state_shape =state_shape
+        self.states_img = torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        self.states = torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        self.actions = torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        self.rewards = torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        self.next_states_img = (
+            torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        )
+        self.next_states = torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        self.dones = torch.empty(0, dtype=torch.bool).detach().to(self.device)
+        self.state_shape = state_shape
 
         self.capacity = capacity
         self.idx = 0
@@ -158,19 +164,23 @@ class Replay_Buffer_carla:
 
         return t.unsqueeze(0).to(self.device)
 
-    def save(self,filename="replay_buffer"):
+    def save(self, filename="replay_buffer"):
         print("saving replay buffer...")
-        file = open(filename,"wb")
-        pickle.dump(self,file,4)
+        file = open(filename, "wb")
+        pickle.dump(self, file, 4)
         file.close()
         print("Done")
-    
 
-
+    @torch.no_grad()
     def add(self, observation):
         if len(self) < self.capacity:
             # self.content.append(observation)
-            temp_tensor = torch.tensor(observation[0][0], dtype=torch.float32).unsqueeze(0).to(self.device)
+            temp_tensor = (
+                torch.tensor(observation[0][0], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.states_img = torch.cat(
                 [
                     self.states_img,
@@ -179,8 +189,13 @@ class Replay_Buffer_carla:
                 0,
             )
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[0][1], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[0][1], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.states = torch.cat(
                 [
                     self.states,
@@ -189,8 +204,13 @@ class Replay_Buffer_carla:
                 0,
             )
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[1], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[1], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.actions = torch.cat(
                 [
                     self.actions,
@@ -199,8 +219,13 @@ class Replay_Buffer_carla:
                 0,
             )
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[2], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[2], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.rewards = torch.cat(
                 [
                     self.rewards,
@@ -209,8 +234,13 @@ class Replay_Buffer_carla:
                 0,
             )
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[3][0], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[3][0], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.next_states_img = torch.cat(
                 [
                     self.next_states_img,
@@ -219,8 +249,13 @@ class Replay_Buffer_carla:
                 0,
             )
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[3][1], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[3][1], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.next_states = torch.cat(
                 [
                     self.next_states,
@@ -229,8 +264,13 @@ class Replay_Buffer_carla:
                 0,
             )
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[4], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[4], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.dones = torch.cat(
                 [
                     self.dones,
@@ -241,32 +281,67 @@ class Replay_Buffer_carla:
             del temp_tensor
         else:
             # self.content[self.idx] = observation
-            
-            temp_tensor = torch.tensor(observation[0][0], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[0][0], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.states_img[self.idx] = temp_tensor
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[0][1], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[0][1], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.states[self.idx] = temp_tensor
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[1], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[1], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.actions[self.idx] = temp_tensor
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[2], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[2], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.rewards[self.idx] = temp_tensor
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[3][0], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[3][0], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.next_states_img[self.idx] = temp_tensor
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[3][1], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[3][1], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.next_states[self.idx] = temp_tensor
             del temp_tensor
-            
-            temp_tensor = torch.tensor(observation[4], dtype=torch.float32).unsqueeze(0).to(self.device)
+
+            temp_tensor = (
+                torch.tensor(observation[4], dtype=torch.float32)
+                .detach()
+                .unsqueeze(0)
+                .to(self.device)
+            )
             self.dones[self.idx] = temp_tensor
             del temp_tensor
 
@@ -280,6 +355,7 @@ class Replay_Buffer_carla:
         # print(f"{len(self)} collected")
         return res
 
+    @torch.no_grad()
     def sample(self, sample_capacity=None, device="cuda"):
         if self.can_sample():
             if sample_capacity:
@@ -289,17 +365,43 @@ class Replay_Buffer_carla:
                 idx = random.sample(range(len(self)), self.batch_size)
             self.indices[:] = idx
             return (
-
-                (self.states_img[self.indices].to(device),
-                self.states[self.indices].to(device)),
+                (
+                    self.states_img[self.indices].to(device),
+                    self.states[self.indices].to(device),
+                ),
                 self.actions[self.indices].to(device),
                 self.rewards[self.indices].to(device),
-                (self.next_states_img[self.indices].to(device),
-                self.next_states[self.indices].to(device)),
+                (
+                    self.next_states_img[self.indices].to(device),
+                    self.next_states[self.indices].to(device),
+                ),
                 self.dones[self.indices].to(device),
             )
         else:
             assert "Can't sample: not enough elements!"
+
+    def empty_replaybuffer(self):
+        print("Emptyng replay buffer...")
+        del self.states_img
+        del self.states
+        del self.actions
+        del self.rewards
+        del self.next_states_img
+        del self.next_states
+        del self.dones
+
+        self.states_img = torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        self.states = torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        self.actions = torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        self.rewards = torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        self.next_states_img = (
+            torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        )
+        self.next_states = torch.empty(0, dtype=torch.float32).detach().to(self.device)
+        self.dones = torch.empty(0, dtype=torch.bool).detach().to(self.device)
+        self.idx = 0
+        self.indices = np.zeros(self.batch_size)
+        print("Done. Replay buffer was empty!")
 
     def shuffle(self, sample_capacity):
         return random.sample(self.content, sample_capacity)
@@ -335,14 +437,15 @@ class Replay_Buffer_carla:
 
     def __len__(self):
         return self.dones.shape[0]
-    
-def complete_with_autosample(replay_buffer,sample_size=None):
-    
+
+
+def complete_with_autosample(replay_buffer, sample_size=None):
+
     if sample_size is None:
         sample_size = replay_buffer.capacity - len(replay_buffer)
-    
+
     obs, action, reward, next_obs, not_done = replay_buffer.sample(sample_size)
-    
+
     if len(replay_buffer) < replay_buffer.capacity:
         # replay_buffer.content.append(observation)
 
@@ -356,7 +459,10 @@ def complete_with_autosample(replay_buffer,sample_size=None):
         replay_buffer.states = torch.cat(
             [
                 replay_buffer.states,
-                torch.tensor(observation[0][1][-replay_buffer.state_shape[1].shape[0]:], dtype=torch.float32)
+                torch.tensor(
+                    observation[0][1][-replay_buffer.state_shape[1].shape[0] :],
+                    dtype=torch.float32,
+                )
                 .unsqueeze(0)
                 .to(replay_buffer.device),
             ],
@@ -392,7 +498,10 @@ def complete_with_autosample(replay_buffer,sample_size=None):
         replay_buffer.next_states = torch.cat(
             [
                 replay_buffer.next_states,
-                torch.tensor(observation[3][1][-replay_buffer.state_shape[1].shape[0]:], dtype=torch.float32)
+                torch.tensor(
+                    observation[3][1][-replay_buffer.state_shape[1].shape[0] :],
+                    dtype=torch.float32,
+                )
                 .unsqueeze(0)
                 .to(replay_buffer.device),
             ],
@@ -408,21 +517,21 @@ def complete_with_autosample(replay_buffer,sample_size=None):
             0,
         )
 
-    
     observation = (obs, action, reward, next_obs, not_done)
     replay_buffer.add(observation)
 
 
-def saturate_replay_buffer(replay_buffer,desired_capacity):
+@torch.no_grad()
+def saturate_replay_buffer(replay_buffer, desired_capacity):
     print("Saturating replay buffer...")
     replay_buffer.capacity = desired_capacity
     k = len(replay_buffer)
     while k < replay_buffer.capacity:
         diff = replay_buffer.capacity - k
-        
-        if diff > k :
+
+        if diff > k:
             diff = k
-        
+
         replay_buffer.states_img = torch.cat(
             [
                 replay_buffer.states_img,
@@ -472,12 +581,13 @@ def saturate_replay_buffer(replay_buffer,desired_capacity):
             ],
             0,
         )
-    
+
         k = len(replay_buffer)
-        
+
     print("Done")
-    
-    #return replay_buffer
+
+    # return replay_buffer
+
 
 class RLDataset(IterableDataset):
     def __init__(self, buffer: Replay_Buffer_carla, sample_size=400) -> None:
@@ -872,7 +982,7 @@ class MainWindow_Tot_Reward(QMainWindow):
         self.tot_reward = 0
         self.action = [0, 0]
         self.frame = 0
-        self.n_wp =0
+        self.n_wp = 0
         self.action_repeat = action_repeat
 
         self.setWindowTitle("My App")
@@ -938,7 +1048,7 @@ class MainWindow_Tot_Reward(QMainWindow):
         font.setPointSize(30)
         self.label10.setFont(font)
         self.label10.setAlignment(Qt.AlignTop | Qt.AlignRight)
-        
+
         label11 = QLabel("#WP:")
         font = label11.font()
         font.setPointSize(20)
@@ -967,10 +1077,10 @@ class MainWindow_Tot_Reward(QMainWindow):
         widget.setLayout(layout)
         self.setCentralWidget(widget)
 
-    def update_labels(self, n_episode, cum_reward, action,n_wp):
+    def update_labels(self, n_episode, cum_reward, action, n_wp):
         # self.tot_reward += reward
         self.action = action
-        self.frame += 1
+        self.frame += 1 * self.action_repeat
         self.n_wp = n_wp
         # self.label2.setText(str(self.tot_reward))
         # self.label2.setText("{:10.3f}".format(self.tot_reward))
@@ -988,8 +1098,16 @@ class MainWindow_Tot_Reward(QMainWindow):
         self.n_wp = 0
 
 
-#avoid_list = [289,291,292,294,295,297,298,300,301,303,304,306,308,309,311,312,315,316,318,320,321,323,325,326,328,330,331,333,335,336,338,340,342,343,345,347,348,350,352,354,356,358,359,361,363,365,367,369,371,373,375,377,380,382,384,386,388,391,393,395,398,400,402,405,407,410,412,415,417,420,422,425,428,431,432,435,438,440,443,446,449,453,455,458,462,465,468,471,474,478,481,484,487,491,494,497,500,504,507,510,513,516,520,523,526,529,532,535,539,542,545,548,551,555,558,561,564,567,571,573,576,579,582,584,587,590,593,596,599,602,605,608,611,614,617,620,629,632,636,639,642,645,648,650,653,656,659,662,664,667,670,672,675,678,680,683,685,688,690,693,696,698,701]
-avoid_list = list(range(135,167+1,1)) + list(range(0,30+1,1)) + list(range(746,755+1,1)) + list(range(876,920+1,1)) + list(range(131,136+1,1)) + list(range(118,130+1,1)) + list(range(78,104+1,1)) 
+# avoid_list = [289,291,292,294,295,297,298,300,301,303,304,306,308,309,311,312,315,316,318,320,321,323,325,326,328,330,331,333,335,336,338,340,342,343,345,347,348,350,352,354,356,358,359,361,363,365,367,369,371,373,375,377,380,382,384,386,388,391,393,395,398,400,402,405,407,410,412,415,417,420,422,425,428,431,432,435,438,440,443,446,449,453,455,458,462,465,468,471,474,478,481,484,487,491,494,497,500,504,507,510,513,516,520,523,526,529,532,535,539,542,545,548,551,555,558,561,564,567,571,573,576,579,582,584,587,590,593,596,599,602,605,608,611,614,617,620,629,632,636,639,642,645,648,650,653,656,659,662,664,667,670,672,675,678,680,683,685,688,690,693,696,698,701]
+avoid_list = (
+    list(range(135, 167 + 1, 1))
+    + list(range(0, 30 + 1, 1))
+    + list(range(746, 755 + 1, 1))
+    + list(range(876, 920 + 1, 1))
+    + list(range(131, 136 + 1, 1))
+    + list(range(118, 130 + 1, 1))
+    + list(range(78, 104 + 1, 1))
+)
 
 import os
 

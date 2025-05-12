@@ -61,7 +61,10 @@ class SAC(object):
             self.actor.parameters(), lr=args.actor_lr, betas=(args.actor_beta, 0.999)
         )
         self.critic_optimizer = torch.optim.Adam(
-            self.critic.parameters(), lr=args.critic_lr, betas=(args.critic_beta, 0.999),weight_decay=args.critic_weight_decay,
+            self.critic.parameters(),
+            lr=args.critic_lr,
+            betas=(args.critic_beta, 0.999),
+            weight_decay=args.critic_weight_decay,
         )
         self.log_alpha_optimizer = torch.optim.Adam(
             [self.log_alpha], lr=args.alpha_lr, betas=(args.alpha_beta, 0.999)

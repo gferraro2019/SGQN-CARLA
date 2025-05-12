@@ -3,6 +3,7 @@
 
 import glob
 import math
+
 # # from agents.navigation.roaming_agent import RoamingAgent
 import os
 import queue
@@ -19,8 +20,15 @@ import pygame
 from gym import spaces
 from mpmath import csch
 
-from utils import (avoid_list, clamp, draw_image, get_actor_name, get_font,
-                   should_quit, vector_to_scalar)
+from utils import (
+    avoid_list,
+    clamp,
+    draw_image,
+    get_actor_name,
+    get_font,
+    should_quit,
+    vector_to_scalar,
+)
 
 # from agents.navigation.roaming_agent import RoamingAgent
 try:
@@ -124,9 +132,9 @@ class CarlaEnv(gym.Env):
         image_size=64,
         camera_fov="160",
         size_way_point=0.15,
-        speed_limit=20,
+        speed_limit=30,
         show_preview=False,
-        max_zero_speed_steps = 300,
+        max_zero_speed_steps=300,
     ):
         """This function initialize the Carla enviroment.
 
@@ -151,7 +159,7 @@ class CarlaEnv(gym.Env):
         """
         super(CarlaEnv, self).__init__()
         self.max_zero_speed_steps = max_zero_speed_steps
-        
+
         self.camera_fov = camera_fov
         self.show_preview = show_preview
         self.render_display = render
@@ -169,9 +177,9 @@ class CarlaEnv(gym.Env):
         self.image_size = image_size
         self.speed_limit = speed_limit
 
-        self.phase = "combo"
+        self.phase = "speed limit"
         self.no_final_reward = False
-        
+
         print(max_episode_steps)
         self._max_episode_steps = int(max_episode_steps)
         self.total_number_waypoint = total_number_waypoint
@@ -339,11 +347,12 @@ class CarlaEnv(gym.Env):
         self.acceleration = None
         self.angular_velocity = None
         self.completed_wp_percent = 0.0
-        
-        #reward coefficient
-        self.a0 = 1 #distance
-        self.a1 = 10 # throttle
-        self.a2 = 4 # steer
+
+        # reward coefficient
+        self.a0 = 1  # distance
+        self.a1 = 1  # throttle
+        self.a2 = 4  # steer
+        self.speed_limit = speed_limit
 
     def spawn_sensors(self):
 
@@ -460,7 +469,9 @@ class CarlaEnv(gym.Env):
     def draw_next_N_waypoints(self, N=10, starting_from=0, lifetime=25):
         for i in range(N):
             self.world.debug.draw_point(
-                self.waypoints[(starting_from + i)%len(self.waypoints)].transform.location,
+                self.waypoints[
+                    (starting_from + i) % len(self.waypoints)
+                ].transform.location,
                 size=self.size_way_point,
                 life_time=lifetime,
                 color=carla.Color(0, 255, 0, 0),
@@ -931,7 +942,6 @@ class CarlaEnv(gym.Env):
             )
             pygame.display.flip()
 
-        
         self.throttle = throttle
         self.steer = steer
         if self.observations_type == "state":
@@ -986,7 +996,7 @@ class CarlaEnv(gym.Env):
         )
         bgr = bgra[:, :, :3]
         rgb = np.flip(bgr, axis=2)
-        return np.round(rgb / 255,2)
+        return np.round(rgb / 255, 2)
 
     def _get_state_obs1(self):
         """This funciton return a state of 9 elements:
@@ -1118,12 +1128,13 @@ class CarlaEnv(gym.Env):
         # completed_percentage_frame = (self.current_step+1)/self._max_episode_steps
 
         return np.array(
-            [   round(self.steer,2),
-                round(self.throttle,2),
+            [
+                round(self.steer, 2),
+                round(self.throttle, 2),
                 round(distance / self.max_distance_from_waypoint, 2),
                 round(self.velocity.x, 2),
                 round(self.velocity.y, 2),
-                round(self.angular_velocity.z , 2),
+                round(self.angular_velocity.z, 2),
                 round(self.acceleration.x, 2),
                 round(self.acceleration.y, 2),
                 # round(self.dot_product, 2),
@@ -1213,7 +1224,9 @@ class CarlaEnv(gym.Env):
         #         distances.append(distance)
 
         for i in range(num_waypoints):
-            temp_waypoint = self.waypoints[(self.current_waypoint_idx + i + 1) % len(self.waypoints)]
+            temp_waypoint = self.waypoints[
+                (self.current_waypoint_idx + i + 1) % len(self.waypoints)
+            ]
             if temp_waypoint is not None:
                 waypoints.append(temp_waypoint)
                 distance = np.sqrt(
@@ -1244,43 +1257,41 @@ class CarlaEnv(gym.Env):
 
         return skipped, waypoints[argmin], distances[argmin], argmin
 
-    
-    
     def _get_reward(self, next_obs):
         import cv2
         import numpy as np
-        def find_pink_barycenter_distance( show_result=True):
+
+        def find_pink_barycenter_distance(show_result=True):
             # Load image
-            img = self.next_obs*255
+            img = self.next_obs * 255
             img = img.astype(np.uint8)
             height, width, _ = img.shape
-            img_rgb = img #cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            
+            img_rgb = img  # cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
             # Image center
             center_x = width / 2
             center_y = height / 2
 
             # Define the specific color you are searching for (RGB)
             # target_color = np.array([143, 0, 255])
-            target_color = np.array([0, 255,0]).astype(np.uint8)
-            
+            target_color = np.array([0, 255, 0]).astype(np.uint8)
+
             tolerance = 30  # You can tweak this
-            xs=[]
+            xs = []
             ys = []
-            
-            for px in range(height-1):
-                for py in range(width-1):
-                    r_x = img[px,py,0]
-                    g_y = img[px,py,1]
-                    b_z = img[px,py,2] 
+
+            for px in range(height - 1):
+                for py in range(width - 1):
+                    r_x = img[px, py, 0]
+                    g_y = img[px, py, 1]
+                    b_z = img[px, py, 2]
                     if r_x == 0 and g_y >= 230 and b_z == 0:
                         # print(r_x,g_y,b_z)
                         xs.append(px)
                         ys.append(py)
 
-        
             if len(xs) == 0:
-                #print("No matching pixels found!")
+                # print("No matching pixels found!")
                 return None, False
 
             # Calculate barycenter
@@ -1288,23 +1299,37 @@ class CarlaEnv(gym.Env):
             barycenter_y = np.mean(ys)
 
             # Calculate Euclidean distance to image center
-            distance = np.sqrt((barycenter_x - width) ** 2 + (barycenter_y - center_y) ** 2)
-            mask = np.zeros((width,height)).astype(np.uint8)
-            mask[int(barycenter_x),int(barycenter_y)] = 255
-            cv2.imshow('Mask Color Barycenter', mask)
+            distance = np.sqrt(
+                (barycenter_x - width) ** 2 + (barycenter_y - center_y) ** 2
+            )
+            mask = np.zeros((width, height)).astype(np.uint8)
+            mask[int(barycenter_x), int(barycenter_y)] = 255
+            cv2.imshow("Mask Color Barycenter", mask)
             cv2.waitKey(1)
             # Check if distance is a float
             if not isinstance(distance, float):
-                raise TypeError(f"Expected distance to be a float, but got {type(distance).__name__}.")
+                raise TypeError(
+                    f"Expected distance to be a float, but got {type(distance).__name__}."
+                )
 
             if show_result:
                 img_out = img_rgb.copy()
-                cv2.circle(img_out, (int(barycenter_y), int(barycenter_x)), 2, (0, 255, 0), -1)
+                cv2.circle(
+                    img_out, (int(barycenter_y), int(barycenter_x)), 2, (0, 255, 0), -1
+                )
                 cv2.circle(img_out, (int(center_y), int(width)), 2, (255, 0, 0), -1)
-                cv2.line(img_out, (int(center_y), int(width)), (int(barycenter_y), int(barycenter_x)), (255, 255, 0), 1)
-                cv2.imshow('Specific Color Barycenter', cv2.cvtColor(img_out, cv2.COLOR_RGB2BGR))
+                cv2.line(
+                    img_out,
+                    (int(center_y), int(width)),
+                    (int(barycenter_y), int(barycenter_x)),
+                    (255, 255, 0),
+                    1,
+                )
+                cv2.imshow(
+                    "Specific Color Barycenter",
+                    cv2.cvtColor(img_out, cv2.COLOR_RGB2BGR),
+                )
                 cv2.waitKey(1)
-
 
             return distance, True
 
@@ -1326,54 +1351,71 @@ class CarlaEnv(gym.Env):
         # compute distances from WPs
         self.distances_to_WPs.clear()
         for i in range(5):
-            waypoint = self.waypoints[(self.current_waypoint_idx + i) % len(self.waypoints)]
+            waypoint = self.waypoints[
+                (self.current_waypoint_idx + i) % len(self.waypoints)
+            ]
             self.distances_to_WPs.append(
                 distance_to_wp(vehicle_location, waypoint.transform.location)
             )
         if len(self.distances_to_WPs) == 0:
             print("empty list!!!")
-            
+
         closest_wp = np.argmin(self.distances_to_WPs)
         distance = self.distances_to_WPs[closest_wp]
 
         if closest_wp != 0:
             if self.current_waypoint_idx < self.total_number_waypoint:
                 # update waypoint to closest
-                self.current_waypoint_idx = (self.current_waypoint_idx+closest_wp ) % len(self.waypoints)
+                self.current_waypoint_idx = (
+                    self.current_waypoint_idx + closest_wp
+                ) % len(self.waypoints)
                 # total_reward += closest_wp * 20
                 # self.counter_waypoint += closest_wp
             else:
                 done = True
 
-        
-        if vector_to_scalar(self.vehicle.get_velocity())<= 1:
+        speed = vector_to_scalar(self.vehicle.get_velocity()) * 3.6
+        if speed <= 1:
             self.counter_zero_progress += 1
             total_reward += -10
         else:
             self.counter_zero_progress = 0
-        
+
         # distance_from_baricenter, valid = find_pink_barycenter_distance()
         # if valid:
         #     print(distance_from_baricenter )
         #     total_reward = 1/(distance_from_baricenter+0.01)
-        
+
         # learn to not to steer too much
         if self.phase == "stop steering":
-            total_reward =  1/( abs(self.steer) +0.01)
+            total_reward = 1 / (abs(self.steer) + 0.01)
             self.no_final_reward = True
         elif self.phase == "go full gas":
-            total_reward =  1/((-1+self.throttle)+0.01)
+            total_reward = 1 / ((-1 + self.throttle) + 0.01)
         elif self.phase == "go closer to the waypoint":
-            total_reward =  1/(distance+0.01)
+            total_reward = 1 / (distance + 0.01)
         elif self.phase == "combo":
-            total_reward +=  self.a0/(distance+0.001) + self.a1*self.throttle + self.a2/( abs(self.steer) +0.01)
-        
-        
+            total_reward += (
+                self.a0 / (distance + 0.001)
+                + self.a1 * self.throttle
+                + self.a2 / (abs(self.steer) + 0.01)
+            )
+
+        elif self.phase == "speed limit":
+
+            total_reward += (
+                self.a0 / (distance + 0.001)
+                + self.a1 / abs(self.speed_limit - speed + 0.01)
+                + self.a2 / (abs(self.steer) + 0.01)
+            )
+
         if distance <= 1.5:
             total_reward += 100
             # update waypoint
             self.counter_waypoint += 1
-            self.current_waypoint_idx = (self.current_waypoint_idx +1) % len(self.waypoints)
+            self.current_waypoint_idx = (self.current_waypoint_idx + 1) % len(
+                self.waypoints
+            )
 
         self.waypoint = self.waypoints[self.current_waypoint_idx]
         if self.counter_waypoint + 5 > self.total_number_waypoint:
@@ -1393,6 +1435,7 @@ class CarlaEnv(gym.Env):
         self.remaining_WPs = self.total_number_waypoint - self.counter_waypoint
         self.previous_distance = distance
 
+        self.info_dict["speed"] = speed
         self.info_dict["distance"] = -distance
         self.info_dict["goal"] = goal
         self.info_dict["#WP"] = self.counter_waypoint
@@ -1403,464 +1446,6 @@ class CarlaEnv(gym.Env):
         # self.info_dict["dot_product"] = self.dot_product
 
         return total_reward, done, self.info_dict
-
-    
-    def _get_reward5(self, throttle, steer):
-
-        def distance_to_wp(vehicle_location, waypoint_location):
-            return np.sqrt(
-                (vehicle_location.x - waypoint_location.x) ** 2
-                + (vehicle_location.y - waypoint_location.y) ** 2
-            )
-
-        self.info_dict.clear()
-        self.info_dict["looped"] = False
-        goal, done, total_reward = False, False, 0
-        vehicle_location = self.vehicle.get_location()
-
-        if self.trace_trajectories:
-            self.trace.append(vehicle_location)
-            self.waypoints_trace.append(self.waypoint.transform.location)
-
-        # compute distances from WPs
-        self.distances_to_WPs.clear()
-        for waypoint in self.waypoints[
-            self.current_waypoint_idx : (self.current_waypoint_idx + 5) % len(self.waypoints)
-        ]:
-            self.distances_to_WPs.append(
-                distance_to_wp(vehicle_location, waypoint.transform.location)
-            )
-        closest_wp = np.argmin(self.distances_to_WPs)
-        distance = self.distances_to_WPs[closest_wp]
-
-        if closest_wp != 0:
-            if self.current_waypoint_idx < self.total_number_waypoint:
-                # update waypoint to closest
-                self.current_waypoint_idx += closest_wp
-                # total_reward += closest_wp * 20
-                # self.counter_waypoint += closest_wp
-            else:
-                done = True
-
-        # vehicle_velocity = self.vehicle.get_velocity()
-        # self.vector_velocity[0] = vehicle_velocity.x
-        # self.vector_velocity[1] = vehicle_velocity.y
-        # self.vector_curr_wp[0] = self.waypoints[
-        #     self.current_waypoint_idx
-        # ].transform.location.x
-        # self.vector_curr_wp[1] = self.waypoints[
-        #     self.current_waypoint_idx
-        # ].transform.location.y
-        # self.vector_next_wp[0] = self.waypoints[
-        #     self.current_waypoint_idx + 1
-        # ].transform.location.x
-        # self.vector_next_wp[1] = self.waypoints[
-        #     self.current_waypoint_idx + 1
-        # ].transform.location.y
-        # vector_trajecory = self.vector_curr_wp - self.vector_next_wp
-        # self.vector_vehicle[0] = vehicle_location.x
-        # self.vector_vehicle[1] = vehicle_location.y
-        cost_action = abs(throttle) + abs(steer)
-
-        if self.velocity <= 1:
-            self.counter_zero_progress += 1
-        else:
-            self.counter_zero_progress = 0
-        # total_reward += self.completed_wp_percent * (
-        #     +self.velocity * 1.5 * self.dot_product
-        #     - (
-        #         (distance)
-        #         + cost_action
-        #         + self.acceleration * 0.1
-        #         + self.angular_velocity
-        #     )
-        # )
-        total_reward += self.velocity * 2 * self.dot_product - (
-            (distance)
-            + cost_action * 7.5
-            + self.acceleration * 0.1
-            + self.angular_velocity * 0.1
-        )
-
-        total_reward = np.tanh(total_reward / 15) * 0.5
-        if distance <= 1.5:
-            total_reward += 0.5
-            # update waypoint
-            self.counter_waypoint += 1
-            self.current_waypoint_idx += 1
-
-        self.waypoint = self.waypoints[self.current_waypoint_idx]
-        if self.counter_waypoint + 1 >= self.total_number_waypoint:
-            done = True
-            goal = True
-
-        elif (
-            distance >= self.max_distance_from_waypoint
-            or self.counter_zero_progress == 900
-        ):
-            self.counter_zero_progress = 0
-            total_reward -= 0.5
-            done = True
-
-        self.draw_next_N_waypoints(5, self.current_waypoint_idx, 1)
-        self.remaining_WPs = self.total_number_waypoint - self.counter_waypoint
-        self.previous_distance = distance
-
-        self.info_dict["distance"] = -distance
-        self.info_dict["goal"] = goal
-        self.info_dict["#WP"] = self.counter_waypoint
-        self.info_dict["velocity"] = self.velocity
-        self.info_dict["angular_velocity"] = self.angular_velocity
-
-        self.info_dict["acceleration"] = self.acceleration
-        self.info_dict["dot_product"] = self.dot_product
-
-        return total_reward, done, self.info_dict
-
-    def _get_reward4(self, throttle, steer):
-
-        def distance_to_wp(vehicle_location, waypoint_location):
-            return np.sqrt(
-                (vehicle_location.x - waypoint_location.x) ** 2
-                + (vehicle_location.y - waypoint_location.y) ** 2
-            )
-
-        info_dict = dict()
-        info_dict["looped"] = False
-        goal, done, total_reward = False, False, 0
-        vehicle_location = self.vehicle.get_location()
-
-        if self.trace_trajectories:
-            self.trace.append(vehicle_location)
-            self.waypoints_trace.append(self.waypoint.transform.location)
-
-        distances_to_WPs = [
-            distance_to_wp(vehicle_location, waypoint.transform.location)
-            for waypoint in self.waypoints[
-                self.current_waypoint_idx : self.current_waypoint_idx + 5
-            ]
-        ]
-        closest_wp = np.argmin(distances_to_WPs)
-        distance = distances_to_WPs[closest_wp]
-
-        if closest_wp != 0:
-            if self.current_waypoint_idx < self.total_number_waypoint:
-                # update waypoint to closest
-                self.current_waypoint_idx += closest_wp
-                total_reward += closest_wp * 20
-                self.counter_waypoint += closest_wp
-            else:
-                done = True
-
-        # distance = np.sqrt(
-        #     (vehicle_location.x - self.waypoint.transform.location.x) ** 2
-        #     + (vehicle_location.y - self.waypoint.transform.location.y) ** 2
-        # )
-
-        vehicle_velocity = self.vehicle.get_velocity()
-        vector_velocity = np.array([vehicle_velocity.x, vehicle_velocity.y])
-
-        vector_curr_wp = np.array(
-            [
-                self.waypoints[self.current_waypoint_idx].transform.location.x,
-                self.waypoints[self.current_waypoint_idx].transform.location.y,
-            ]
-        )
-        vector_next_wp = np.array(
-            [
-                self.waypoints[self.current_waypoint_idx + 1].transform.location.x,
-                self.waypoints[self.current_waypoint_idx + 1].transform.location.y,
-            ]
-        )
-        vector_trajecory = vector_curr_wp - vector_next_wp
-
-        total_reward = cosine_similarity(vector_velocity, vector_trajecory) - 1
-
-        # vector_distance = vector_curr_wp - np.array([vehicle_location.x,vehicle_location.y])
-        # similarity = cosine_similarity(vector_velocity,vector_distance)
-        # if  similarity>=0:
-        #     print("good direction",similarity)
-        # else:
-        #     print("wrong direction",similarity)
-
-        speed_limit = 20
-        speed = round(
-            3.6 * np.linalg.norm(np.array([vehicle_velocity.x, vehicle_velocity.y])), 3
-        )
-        speed_reward = -abs(speed - speed_limit)
-
-        total_reward += speed_reward - distance / 10 - abs(steer) * 10
-
-        # if speed <= 1:
-        #     self.counter_zero_progress += 1
-        # else:
-        #     self.counter_zero_progress = 0
-
-        if self.wp_is_reached:
-            self.previous_distance = distance
-            self.wp_is_reached = False
-
-        self.remaining_WPs = self.total_number_waypoint - self.counter_waypoint
-        self.previous_distance = distance
-
-        if distance <= 3:
-            self.wp_is_reached = True
-            total_reward += 100  # self.counter_waypoint
-
-            # update waypoint
-            self.counter_waypoint += 1
-            self.current_waypoint_idx += 1
-            self.waypoint = self.waypoints[self.current_waypoint_idx]
-            if self.counter_waypoint + 1 >= self.total_number_waypoint:
-                done = True
-                goal = True
-                # total_reward += 100#self.counter_waypoint
-
-        elif (
-            distance
-            >= self.max_distance_from_waypoint
-            # or self.counter_zero_progress == 300
-        ):
-            # self.plot_trajectories()
-            # self.counter_zero_progress = 0
-            # total_reward = -1#-0.01 * distance
-            done = True
-
-        self.draw_next_N_waypoints(5, self.current_waypoint_idx, 1)
-        self.remaining_WPs = self.total_number_waypoint - self.counter_waypoint
-
-        info_dict["distance"] = -total_reward  # -self.remaining_WPs
-        info_dict["goal"] = goal
-        info_dict["#WP"] = self.counter_waypoint
-        info_dict["speed"] = speed
-
-        return total_reward, done, info_dict
-
-    def _get_reward3(self, throttle, steer):
-        info_dict = dict()
-        info_dict["looped"] = False
-        goal, done, total_reward = False, False, 0
-        vehicle_location = self.vehicle.get_location()
-
-        if self.trace_trajectories:
-            self.trace.append(vehicle_location)
-            self.waypoints_trace.append(self.waypoint.transform.location)
-
-        distance = np.sqrt(
-            (vehicle_location.x - self.waypoint.transform.location.x) ** 2
-            + (vehicle_location.y - self.waypoint.transform.location.y) ** 2
-        )
-
-        if self.wp_is_reached:
-            self.previous_distance = distance
-            self.wp_is_reached = False
-
-        self.remaining_WPs = self.total_number_waypoint - self.counter_waypoint
-        self.previous_distance = distance
-
-        if distance <= 2:
-            self.wp_is_reached = True
-            # total_reward += 100 #self.counter_waypoint
-
-            # update waypoint
-            self.counter_waypoint += 1
-            self.current_waypoint_idx += 1
-            self.waypoint = self.waypoints[self.current_waypoint_idx]
-            if self.counter_waypoint + 1 >= self.total_number_waypoint:
-                done = True
-                goal = True
-                # total_reward += 100#self.counter_waypoint
-
-        elif (
-            distance
-            >= self.max_distance_from_waypoint
-            # or self.counter_zero_progress == 300
-        ):
-            # self.plot_trajectories()
-            # self.counter_zero_progress = 0
-            # total_reward = -1#-0.01 * distance
-            done = True
-
-        self.draw_next_N_waypoints(5, self.counter_waypoint, 1)
-        total_reward = -self.remaining_WPs - distance
-
-        info_dict["distance"] = -self.remaining_WPs
-        info_dict["goal"] = goal
-        info_dict["#WP"] = self.counter_waypoint
-
-        return total_reward / 100, done, info_dict
-
-    def _get_reward2(self, throttle, steer):
-        info_dict = dict()
-        info_dict["looped"] = False
-        goal, done, total_reward = False, False, 0
-        vehicle_location = self.vehicle.get_location()
-
-        if self.trace_trajectories:
-            self.trace.append(vehicle_location)
-            self.waypoints_trace.append(self.waypoint.transform.location)
-
-        distance = np.sqrt(
-            (vehicle_location.x - self.waypoint.transform.location.x) ** 2
-            + (vehicle_location.y - self.waypoint.transform.location.y) ** 2
-        )
-
-        vehicle_velocity = self.vehicle.get_velocity()
-        speed = round(
-            3.6 * np.linalg.norm(np.array([vehicle_velocity.x, vehicle_velocity.y])), 3
-        )
-
-        if self.wp_is_reached:
-            self.previous_distance = distance
-            self.wp_is_reached = False
-
-        self.remaining_WPs = self.total_number_waypoint - self.counter_waypoint
-        self.previous_distance = distance
-
-        if distance <= 2:
-            self.wp_is_reached = True
-            total_reward += 100  # self.counter_waypoint
-
-            # update waypoint
-            self.counter_waypoint += 1
-            self.current_waypoint_idx += 1
-            self.waypoint = self.waypoints[self.current_waypoint_idx]
-            if self.counter_waypoint + 1 >= self.total_number_waypoint:
-                done = True
-                goal = True
-                total_reward += 100  # self.counter_waypoint
-
-        elif (
-            distance
-            >= self.max_distance_from_waypoint
-            # or self.counter_zero_progress == 300
-        ):
-            # self.plot_trajectories()
-            # self.counter_zero_progress = 0
-            # total_reward = -1#-0.01 * distance
-            done = True
-
-        self.draw_next_N_waypoints(5, self.counter_waypoint, 1)
-
-        info_dict["distance"] = -total_reward  # self.remaining_WPs
-        info_dict["goal"] = goal
-        info_dict["#WP"] = self.counter_waypoint
-
-        return total_reward, done, info_dict
-
-    def _get_reward1(self, throttle, steer):
-        info_dict = dict()
-        info_dict["looped"] = False
-        goal, done, total_reward = False, False, 0
-        vehicle_location = self.vehicle.get_location()
-
-        if self.trace_trajectories:
-            self.trace.append(vehicle_location)
-            self.waypoints_trace.append(self.waypoint.transform.location)
-
-        distance = np.sqrt(
-            (vehicle_location.x - self.waypoint.transform.location.x) ** 2
-            + (vehicle_location.y - self.waypoint.transform.location.y) ** 2
-        )
-
-        vehicle_velocity = self.vehicle.get_velocity()
-        speed = round(
-            3.6 * np.linalg.norm(np.array([vehicle_velocity.x, vehicle_velocity.y])), 3
-        )
-
-        # if speed <= 1:
-        #     self.counter_zero_progress += 1
-        # else:
-        #     self.counter_zero_progress = 0
-
-        # the best till now
-        # total_reward = ((self.counter_waypoint-1)/(self.current_step+1))*self._max_episode_steps - 0
-
-        # total_reward = (self.counter_waypoint/(self.current_step+1))*self._max_episode_steps -1
-        # rew1 = (k*step/(steps))-1000
-        # total_reward = self.counter_waypoint - self.current_step/1000 - 0.7 + self.bonus
-
-        # total_reward += self.counter_waypoint*1000/self._max_episode_steps
-
-        acceleration = vector_to_scalar(self.vehicle.get_acceleration())
-        if acceleration > 1:
-            total_reward += -acceleration
-
-        if self.wp_is_reached:
-            self.previous_distance = distance
-            self.wp_is_reached = False
-
-        # if it doesn't shorten the distance
-        diff = distance - self.previous_distance
-        if diff < 0:
-            total_reward = 10  # self.max_distance_from_waypoint - diff #1 + throttle
-        else:
-            total_reward = -10  # -diff #-1 - throttle
-
-        # if diff >= 0 and diff <= 0.1:
-        #     total_reward += -0.1
-        #     self.counter_zero_progress += 1
-
-        # if it goes too fast or too slow
-        if speed > 1 and speed <= 15:
-            total_reward += speed / 10
-        else:
-            total_reward += -1 - speed / 10  # - throttle
-
-        # # if it turns too much
-        # if steer >= -0.5 and steer<=0.5:
-        #     #total_reward += speed/10
-        #     pass
-        # else:
-        #     total_reward += -1 - steer/10 #- throttle
-
-        # cost per step
-        total_reward += -0.5 - abs(steer)
-
-        # total_reward += - abs(steer)/10
-        # total_reward += (-diff - abs(steer))*speed
-
-        self.remaining_WPs = self.total_number_waypoint - self.counter_waypoint
-        self.previous_distance = distance
-
-        if distance <= 2:
-            self.wp_is_reached = True
-            total_reward += 100  # self.counter_waypoint
-            # self.bonus +=1
-
-            # update waypoint
-            self.counter_waypoint += 1
-            self.current_waypoint_idx += 1
-            # self.waypoint = self.waypoint.next(1.)[0]
-            self.waypoint = self.waypoints[self.current_waypoint_idx]
-            if self.counter_waypoint + 1 >= self.total_number_waypoint:
-                done = True
-                goal = True
-                total_reward += 100  # self.counter_waypoint
-
-        elif (
-            distance
-            >= self.max_distance_from_waypoint
-            # or self.counter_zero_progress == 300
-        ):
-            # self.plot_trajectories()
-            # self.counter_zero_progress = 0
-            # total_reward = -1#-0.01 * distance
-            done = True
-
-        # if self.last_done_refresh !=self.counter_waypoint and (self.counter_waypoint + 4) % 10 ==0:
-        #     self.draw_next_N_waypoints(6,self.counter_waypoint,)
-        #     self.last_done_refresh = self.counter_waypoint
-
-        self.draw_next_N_waypoints(5, self.counter_waypoint, 1)
-        # elif distance > 1 + self.previous_distance and distance < self.max_distance_from_waypoint:
-        #     total_reward = -1#-0.01 * distance
-
-        info_dict["distance"] = -total_reward  # self.remaining_WPs
-        info_dict["goal"] = goal
-        info_dict["#WP"] = self.counter_waypoint
-
-        return total_reward, done, info_dict
 
     def _get_follow_waypoint_reward(self, location):
         nearest_wp = self.map.get_waypoint(location, project_to_road=True)

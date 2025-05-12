@@ -10,14 +10,13 @@ def parse_args():
     parser.add_argument("--domain_name", default="carla")
     parser.add_argument("--task_name", default="drive")
     parser.add_argument("--frame_stack", default=3, type=int)
-    parser.add_argument("--action_repeat", default=5, type=int)
+    parser.add_argument("--action_repeat", default=1, type=int)
     parser.add_argument("--episode_length", default=30000, type=int)
     parser.add_argument("--eval_mode", default="color_easy", type=str)
-    parser.add_argument("--capacity", default=60_000, type=str)
+    parser.add_argument("--capacity", default=50_000, type=str)
     parser.add_argument("--n_episodes", default=100_000, type=int)
     parser.add_argument("--lower_limit_return_", default=-40000, type=float)
     parser.add_argument("--size_target_point", default=0.04, type=float)
-    
 
     # agent
     parser.add_argument("--algorithm", default="sac", type=str)
@@ -30,7 +29,7 @@ def parse_args():
     parser.add_argument("--discount", default=0.99, type=float)
     parser.add_argument(
         "--init_steps",
-        default=2000,
+        default=500,
         type=int,
         help="the number of initial steps to take before the agent will be update after each frame",
     )
@@ -42,13 +41,13 @@ def parse_args():
     parser.add_argument("--actor_beta", default=0.9, type=float)
     parser.add_argument("--actor_log_std_min", default=-2, type=float)
     parser.add_argument("--actor_log_std_max", default=2, type=float)
-    parser.add_argument("--actor_update_freq", default=2, type=int)
+    parser.add_argument("--actor_update_freq", default=200, type=int)
 
     # critic
     parser.add_argument("--critic_lr", default=1e-3, type=float)
     parser.add_argument("--critic_beta", default=0.9, type=float)
     parser.add_argument("--critic_tau", default=0.01, type=float)
-    parser.add_argument("--critic_target_update_freq", default=2, type=int)
+    parser.add_argument("--critic_target_update_freq", default=10_000, type=int)
     parser.add_argument("--critic_weight_decay", default=0, type=float)
 
     # architecture
@@ -88,7 +87,7 @@ def parse_args():
     parser.add_argument("--distracting_cs_intensity", default=0.0, type=float)
 
     # misc
-    parser.add_argument("--seed", default=10143, type=int)
+    parser.add_argument("--seed", default=10258, type=int)
     parser.add_argument("--log_dir", default="logs", type=str)
     parser.add_argument("--save_video", default=False, action="store_true")
 

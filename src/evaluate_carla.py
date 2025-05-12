@@ -14,8 +14,12 @@ from arguments import parse_args
 from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla, VideoRecord_carla
 from logger import Logger
-from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
-                   create_video_from_images, load_dataset_for_carla)
+from utils import (
+    MainWindow_Reward,
+    MainWindow_Tot_Reward,
+    create_video_from_images,
+    load_dataset_for_carla,
+)
 
 
 def main(args):
@@ -48,7 +52,7 @@ def main(args):
         max_episode_steps,
         lower_limit_return_=args.lower_limit_return_,
         distance_factor_between_WPs=10,
-        size_target_point=args.size_target_point
+        size_target_point=args.size_target_point,
     )
     env = FrameStack_carla(env, args.frame_stack)
 
@@ -59,15 +63,20 @@ def main(args):
 
     args.minimum_alpha = 0.3
 
-
     # Create the agent
-    agent = make_agent(obs_shape=shp, action_shape=[2], env_action_spaces=env.action_space.spaces,args=args)
+    agent = make_agent(
+        obs_shape=shp,
+        action_shape=[2],
+        env_action_spaces=env.action_space.spaces,
+        args=args,
+    )
 
-    folder = 10226
+    folder = 10277
 
     k = 0
     # Load existing actor and critic
     episodes = [str(i) for i in range(50, 1000, 50)]
+    n_episodes = 2
     for e in episodes:
         try:
             actor_state_dict = torch.load(
@@ -85,10 +94,10 @@ def main(args):
             # EVALUATE:
 
             episode_rewards = []
-            info = {"speed":0}
+            info = {"speed": 0}
 
             start_time = time.time()
-            for n_episode in range(3):
+            for n_episode in range(n_episodes):
                 obs = env.reset()
                 window_tot_reward.reset_tot_reward()
                 app2.processEvents()
@@ -103,10 +112,10 @@ def main(args):
                             action = agent.sample_action(obs)
 
                         if abs(action[1]) < 0.1:
-                            action[1]=0.0
-                    
-                        if info["speed"]>=20:
-                            action[0]=0.0
+                            action[1] = 0.0
+
+                        # if info["speed"]>=20:
+                        #     action[0]=0.0
 
                         cum_reward = 0
                         for _ in range(args.action_repeat):
@@ -125,7 +134,7 @@ def main(args):
                         app1.processEvents()
 
                         window_tot_reward.update_labels(
-                            n_episode, episode_reward, action,info["#WP"]
+                            n_episode, episode_reward, action, info["#WP"]
                         )
                         app2.processEvents()
 

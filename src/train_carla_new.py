@@ -8,13 +8,18 @@ from PyQt5 import QtCore, QtWidgets
 from zmq import device
 
 import wandb
+
 # import utils
 from algorithms_new.sac import SAC
 from arguments import parse_args
 from carla_wrapper import CarlaEnv
 from env.wrappers import FrameStack_carla
-from utils import (MainWindow_Reward, MainWindow_Tot_Reward,
-                   ReplayBuffer_carla, load_dataset_for_carla)
+from utils import (
+    MainWindow_Reward,
+    MainWindow_Tot_Reward,
+    ReplayBuffer_carla,
+    load_dataset_for_carla,
+)
 from utils_new import ReplayBuffer_Carla
 
 os.system("pkill -f 'CarlaUE4' ")
@@ -150,7 +155,7 @@ agent = SAC(
 model_dir = "model"
 
 # load model
-model_name = None  # "700"
+model_name = "700"
 if model_name is not None:
     # load model
     agent.load_weights("model", "carla", model_name)
@@ -162,7 +167,7 @@ distance = 5
 
 # Start training
 steps_per_episode = 0
-info = {"speed": 0,"#WP":0}
+info = {"speed": 0, "#WP": 0}
 print("Training...")
 for train_step in range(0, args.train_steps + 1):
     if done:
@@ -172,8 +177,10 @@ for train_step in range(0, args.train_steps + 1):
                 agent.save(model_dir, "carla", n_episode)
 
         wandb.log({"ep_return": episode_return, "step_count": env.current_step})
-        print(f"N. Episode: {n_episode}, Eps.Return: {episode_return}, Steps Count.: {env.current_step}, N.WPs:{info['#WP']}")
-              
+        print(
+            f"N. Episode: {n_episode}, Eps.Return: {episode_return}, Steps Count.: {env.current_step}, N.WPs:{info['#WP']}"
+        )
+
         # Reset environment
         obs = env.reset()
         done = False
@@ -222,7 +229,7 @@ for train_step in range(0, args.train_steps + 1):
         distance = info["distance"]
         if done:
             break
-    reward = cum_reward 
+    reward = cum_reward
 
     # train
     entropy = agent.train(train_step, args.device)
@@ -242,6 +249,7 @@ for train_step in range(0, args.train_steps + 1):
             "distance": -distance,
             "entropy": entropy,
             "#WPs": info["#WP"],
+            "speed": info["speed"],
             # "acceleration": info["acceleration"],
             # "velocity": info["velocity"],
             # "angular_velocity": info["angular_velocity"],
